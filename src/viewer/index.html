@@ -3,679 +3,1802 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ultrateam — watch log</title>
+<title>ultrateam — shared agent memory</title>
+<script>
+  (function() {
+    try {
+      var saved = localStorage.getItem('ut-theme');
+      if (saved === 'dark' || saved === 'light') {
+        document.documentElement.dataset.theme = saved;
+      }
+    } catch (e) {}
+  })();
+</script>
 <style>
 /* ============================================================
-   ultrateam viewer — "night watch" design tokens
-   Dark-first. Provider colors are the validated 3-slot
-   categorical palette (orange/aqua/blue) + deliberate neutrals;
-   identity is never color-alone (icon + name always present),
-   which is also why providers beyond the three slots share the
-   neutral — adding hues would break the validated set.
+   Instant Theme Transition Suppression (Zero Flicker)
    ============================================================ */
+html.disable-transitions,
+html.disable-transitions *,
+html.disable-transitions *::before,
+html.disable-transitions *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
+}
+
 :root {
   color-scheme: dark;
-  --bg: #0e141b;
-  --surface: #161e27;
-  --surface-2: #1c2632;
-  --ink: #e8ecf1;
-  --ink-2: #9aa7b6;
-  --ink-3: #8fa0b0;   /* 6.3:1 on --surface — AA at small sizes */
-  --line: #26303c;
-  --line-soft: #1d2631;
-  --c-anthropic: #d95926;
-  --c-openai: #199e70;
-  --c-github: #3987e5;
-  --c-cursor: #97a3b2;
-  --c-other: #6b7684;
-  --seq: #3987e5;
-  --focus: #86b6ef;
-  --mono: "Cascadia Code", ui-monospace, "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
-  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-sans: "Söhne", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Inter", sans-serif;
+  --font-mono: "Söhne Mono", "SF Mono", "Geist Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+
+  /* Dark Theme Palette (Deeper, Modern Dark) */
+  --bg: #141414;
+  --bg-sidebar: #0e0e0e;
+  --card: #1c1c1c;
+  --card-hover: #232323;
+  --surface: #222222;
+  --surface-hover: #2b2b2b;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #f0f0f0;
+  --text-secondary: #a6a6a6;
+  --text-tertiary: #6b6b6b;
+
+  --accent-blue: #3b82f6;
+  --accent-amber: #f59e0b;
+  --accent-amber-bg: rgba(245, 158, 11, 0.08);
+  --accent-amber-border: rgba(245, 158, 11, 0.22);
+  --accent-green: #10a37f;
+  --accent-purple: #a855f7;
+
+  --tag-bg: #222222;
+  --tag-text: #b4b4b4;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 9999px;
+
+  /* Provider Brand Colors */
+  --p-anthropic: #d97757;
+  --p-openai: #10a37f;
+  --p-google: #4a8cf6;
+  --p-github: #a855f7;
+  --p-cursor: #38bdf8;
+  --p-human: #0ea5e9;
+  --p-other: #888888;
 }
+
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --surface-2: #edf0f3;
-  --ink: #16202b;
-  --ink-2: #4e5b69;
-  --ink-3: #57636f;   /* 6.1:1 on white — AA at small sizes */
-  --line: #dde3e9;
-  --line-soft: #e9edf1;
-  --c-anthropic: #eb6834;
-  --c-openai: #1baf7a;
-  --c-github: #2a78d6;
-  --c-cursor: #5b6675;
-  --c-other: #8b95a1;
-  --seq: #2a78d6;
-  --focus: #1c5cab;
+
+  /* ChatGPT Light Theme Palette */
+  --bg: #ffffff;
+  --bg-sidebar: #f9f9f9;
+  --card: #ffffff;
+  --card-hover: #f7f7f8;
+  --surface: #f4f4f4;
+  --surface-hover: #ececec;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.14);
+
+  --text-primary: #0d0d0d;
+  --text-secondary: #676767;
+  --text-tertiary: #8e8e8e;
+
+  --accent-blue: #2563eb;
+  --accent-amber: #d97706;
+  --accent-amber-bg: rgba(217, 119, 6, 0.08);
+  --accent-amber-border: rgba(217, 119, 6, 0.22);
+  --accent-green: #10a37f;
+  --accent-purple: #7e22ce;
+
+  --tag-bg: #f4f4f4;
+  --tag-text: #52525b;
+
+  --p-anthropic: #c25e3f;
+  --p-openai: #0d8c6c;
+  --p-google: #2563eb;
+  --p-github: #7e22ce;
+  --p-cursor: #0284c7;
+  --p-human: #0369a1;
+  --p-other: #71717a;
 }
+
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --bg: #f4f6f8;
-    --surface: #ffffff;
-    --surface-2: #edf0f3;
-    --ink: #16202b;
-    --ink-2: #4e5b69;
-    --ink-3: #57636f;
-    --line: #dde3e9;
-    --line-soft: #e9edf1;
-    --c-anthropic: #eb6834;
-    --c-openai: #1baf7a;
-    --c-github: #2a78d6;
-    --c-cursor: #5b6675;
-    --c-other: #8b95a1;
-    --seq: #2a78d6;
-    --focus: #1c5cab;
+    --bg: #ffffff;
+    --bg-sidebar: #f9f9f9;
+    --card: #ffffff;
+    --card-hover: #f7f7f8;
+    --surface: #f4f4f4;
+    --surface-hover: #ececec;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-light: rgba(0, 0, 0, 0.14);
+    --text-primary: #0d0d0d;
+    --text-secondary: #676767;
+    --text-tertiary: #8e8e8e;
+    --accent-blue: #2563eb;
+    --accent-amber: #d97706;
+    --accent-amber-bg: rgba(217, 119, 6, 0.08);
+    --accent-amber-border: rgba(217, 119, 6, 0.22);
+    --accent-green: #10a37f;
+    --accent-purple: #7e22ce;
+    --tag-bg: #f4f4f4;
+    --tag-text: #52525b;
+    --p-anthropic: #c25e3f;
+    --p-openai: #0d8c6c;
+    --p-google: #2563eb;
+    --p-github: #7e22ce;
+    --p-cursor: #0284c7;
+    --p-human: #0369a1;
+    --p-other: #71717a;
   }
 }
 
-* { box-sizing: border-box; }
-html, body { margin: 0; }
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--sans);
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   line-height: 1.5;
-}
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-
-/* provider color hook: elements read var(--pc) */
-.p-anthropic { --pc: var(--c-anthropic); }
-.p-openai    { --pc: var(--c-openai); }
-.p-github    { --pc: var(--c-github); }
-.p-cursor    { --pc: var(--c-cursor); }
-.p-other     { --pc: var(--c-other); }
-
-/* ---------- header ---------- */
-.top {
-  position: sticky; top: 0; z-index: 10;
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 14px 24px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-@media (min-width: 881px) {
-  /* the sidebar's sticky offset assumes a one-row header */
-  .top { flex-wrap: nowrap; }
-}
-.wordmark {
-  font-family: var(--mono);
-  font-size: 17px; font-weight: 700; letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-.wordmark .cursor-blink {
-  display: inline-block; width: 0.55em; height: 1.05em;
-  background: var(--ink); vertical-align: text-bottom; margin-left: 2px;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .wordmark .cursor-blink { animation: blink 1.2s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
-}
-.tagline {
-  font-size: 12.5px; color: var(--ink-3);
-  border-left: 1px solid var(--line); padding-left: 16px;
-}
-.top .controls { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-select, .search, button.ghost {
-  font-family: var(--mono); font-size: 12.5px;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 7px 10px;
-}
-select { max-width: 220px; }
-.search { width: 220px; }
-.search::placeholder { color: var(--ink-3); }
-button.ghost { cursor: pointer; }
-button.ghost:hover { border-color: var(--ink-3); }
-
-/* ---------- layout ---------- */
-.layout {
-  display: grid; grid-template-columns: 264px minmax(0, 1fr);
-  gap: 28px; max-width: 1080px; margin: 0 auto; padding: 24px;
-}
-.rail { display: flex; flex-direction: column; gap: 26px; align-self: start; position: sticky; top: 76px; }
-
-.eyebrow {
-  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
-  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
-  display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
-}
-.eyebrow::after { content: ""; flex: 1; border-top: 1px solid var(--line-soft); }
-
-/* stats */
-.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.tile {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 9px; padding: 10px 12px;
-}
-.tile .v { font-size: 24px; font-weight: 650; line-height: 1.15; }
-.tile .l {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--ink-3); margin-top: 2px;
+  min-height: 100vh;
 }
 
-/* activity strip (single-hue sequential; per-day data is in each cell's
-   aria-label, so it is reachable by keyboard and screen reader, with the
-   tooltip shown on hover AND focus) */
-.activity .strip {
-  display: flex; align-items: flex-end; gap: 2px; height: 46px;
-  border-bottom: 1px solid var(--line); padding-bottom: 1px;
-  margin: 0; padding-left: 0; list-style: none;
-}
-.activity .cell { flex: 1; display: flex; align-items: flex-end; height: 100%; cursor: default; }
-.activity .bar { width: 100%; min-height: 2px; background: var(--seq); border-radius: 2px 2px 0 0; }
-.activity .cell.zero .bar { background: var(--line); }
-.activity .axis {
-  display: flex; justify-content: space-between;
-  font-family: var(--mono); font-size: 10px; color: var(--ink-3); margin-top: 4px;
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
 }
 
-/* roster */
-.roster { display: flex; flex-direction: column; gap: 4px; }
-.member {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
-  gap: 8px; width: 100%; text-align: left;
-  background: none; border: 1px solid transparent; border-radius: 8px;
-  padding: 7px 9px; color: var(--ink); font-family: var(--sans); font-size: 13px;
-  cursor: pointer;
+:focus-visible {
+  outline: 1.5px solid var(--accent-blue);
+  outline-offset: 1px;
 }
-.member:hover { background: var(--surface); border-color: var(--line); }
-.member[aria-pressed="true"] { background: var(--surface); border-color: var(--pc); }
-.member .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); }
-.member .who { min-width: 0; }
-.member .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.member .sub {
-  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.member .n { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
 
-/* ---------- feed ---------- */
-.feed { min-width: 0; }
-.feed-note { font-size: 12.5px; color: var(--ink-2); margin: 0 0 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.day { margin: 26px 0 12px; }
-.day:first-child { margin-top: 0; }
+/* ============================================================
+   ChatGPT-Inspired Top Navigation Bar
+   ============================================================ */
+.nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  height: 50px;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
 
-/* the watch line: rail segment + node per entry, colored by the agent on duty */
-.entry {
-  display: grid; grid-template-columns: 26px minmax(0, 1fr);
-  gap: 0 14px; position: relative;
-}
-.entry .node { position: relative; }
-.entry .node::before {
-  content: ""; position: absolute; left: 11px; top: 0; bottom: 0;
-  width: 2px; background: var(--pc); opacity: 0.55;
-}
-.entry .node::after {
-  content: ""; position: absolute; left: 6px; top: 20px;
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--pc); border: 2px solid var(--bg);
-}
-.entry.handoff .node::after { border-radius: 3px; transform: rotate(45deg); }
-.entry:last-child .node::before { bottom: auto; height: 26px; }
-
-.card {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 10px; padding: 13px 16px; margin: 0 0 10px;
-  cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease;
-  overflow-wrap: anywhere; /* agent text can contain long unbroken paths */
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   min-width: 0;
 }
-.entry.handoff .card { border-left: 3px solid var(--pc); }
-.card:hover { border-color: var(--pc); transform: translateY(-1px); }
-.meta {
-  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
-}
-.meta .t { color: var(--ink-3); }
-.meta .who { color: var(--ink); font-weight: 600; }
-.badge {
-  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 1px 7px; border-radius: 99px;
-  background: color-mix(in srgb, var(--pc) 16%, transparent);
-  color: var(--ink);
-}
-.card h3 { margin: 6px 0 4px; font-size: 15.5px; font-weight: 640; line-height: 1.3; }
-/* the disclosure control IS the title — real button, so semantics survive */
-.card h3 .tbtn {
-  all: unset; cursor: pointer; font: inherit; color: inherit;
-  overflow-wrap: anywhere;
-}
-.card h3 .tbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-.card .sum { margin: 0; color: var(--ink-2); }
-.card:not(.open) .sum {
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.detail { display: none; margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
-.card.open .detail { display: block; }
-.detail h4 {
-  margin: 10px 0 4px; font-family: var(--mono); font-size: 10px;
-  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600;
-}
-.detail ul { margin: 0; padding: 0; list-style: none; }
-.detail li { padding-left: 16px; position: relative; margin: 3px 0; color: var(--ink-2); }
-.detail li::before { content: "–"; position: absolute; left: 2px; color: var(--ink-3); }
-.detail .threads li::before { content: "○"; color: var(--pc); font-size: 11px; top: 1px; }
-.chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.chip {
-  font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);
-  background: var(--surface-2); border-radius: 5px; padding: 2px 7px;
-  overflow-wrap: anywhere;
-}
-.idline { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 10px; overflow-wrap: anywhere; }
 
-/* empty / error */
-.blank {
-  border: 1px dashed var(--line); border-radius: 12px;
-  padding: 42px 24px; text-align: center; color: var(--ink-2);
+.breadcrumb-root {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-decoration: none;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s ease;
 }
-.blank code {
-  font-family: var(--mono); font-size: 12px;
-  background: var(--surface-2); padding: 2px 6px; border-radius: 5px;
+.breadcrumb-root:hover {
+  background: var(--surface);
 }
 
-/* tooltip (activity strip) */
-.tip {
-  position: fixed; z-index: 30; pointer-events: none;
-  font-family: var(--mono); font-size: 11px;
-  background: var(--surface-2); color: var(--ink);
-  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px;
+.ultrateam-logo-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.ultrateam-logo-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  display: inline-block;
+}
+
+.breadcrumb-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.nav-center {
+  flex: 1;
+  max-width: 440px;
+}
+
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.search-icon-svg {
+  position: absolute;
+  left: 0.75rem;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.search-box {
+  width: 100%;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.2rem 2.4rem 0.2rem 2.2rem;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+}
+.search-box:focus {
+  border-color: var(--border-light);
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border-light);
+}
+.search-box::placeholder {
+  color: var(--text-secondary);
+}
+.search-shortcut {
+  position: absolute;
+  right: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 2px 6px;
+  pointer-events: none;
+}
+.search-clear-btn {
+  position: absolute;
+  right: 2.1rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
   display: none;
 }
-
-/* entrance: one orchestrated rise on the FIRST paint only — re-renders from
-   polling or interaction must not replay it */
-@media (prefers-reduced-motion: no-preference) {
-  .feed.anim .entry { opacity: 0; transform: translateY(7px); animation: rise 0.4s ease forwards; animation-delay: calc(var(--i, 0) * 35ms); }
-  @keyframes rise { to { opacity: 1; transform: none; } }
+.search-clear-btn:hover {
+  color: var(--text-primary);
 }
 
-@media (max-width: 880px) {
-  .layout { grid-template-columns: 1fr; gap: 18px; }
-  .rail { position: static; }
-  .tagline { display: none; }
-  .search { width: 150px; }
-  select { max-width: 150px; }
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.nav-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.nav-btn.icon-only {
+  width: 32px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+}
+
+/* ============================================================
+   ChatGPT / Productivity 2-Column Workspace Layout
+   ============================================================ */
+.workspace {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 4rem;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+/* Sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: sticky;
+  top: 66px;
+}
+
+.sidebar-group-title {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin: 0 0 0.45rem 0.45rem;
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+.nav-item-btn:hover {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.nav-item-btn.active {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 550;
+}
+
+.nav-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.nav-item-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.nav-item-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-count-pill {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+}
+
+/* Agent Roster Item */
+.agent-item-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.42rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+.agent-item-btn:hover {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.agent-item-btn.active {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 550;
+}
+
+.agent-icon-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--p-color, var(--text-primary));
+  background: rgba(125, 125, 125, 0.07);
+}
+.agent-icon-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.agent-name-text {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-model-text {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+   Main Document Content
+   ============================================================ */
+.document-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+/* Page Header & Properties Table */
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.page-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.page-title {
+  font-size: 1.65rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.properties-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.property-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+}
+.property-label {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+}
+.property-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Database Views Toolbar */
+.views-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.25rem;
+}
+
+.views-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+  width: 100%;
+}
+
+.view-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.83rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: all 0.12s ease;
+}
+.view-tab-btn:hover {
+  color: var(--text-primary);
+}
+.view-tab-btn.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+  font-weight: 600;
+}
+.view-tab-count {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  opacity: 0.7;
+}
+
+/* Timeline Stream */
+.timeline-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* Card Block */
+.notion-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.3rem;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  overflow-wrap: anywhere;
+}
+.notion-card:hover {
+  background: var(--card-hover);
+  border-color: var(--border-light);
+}
+.notion-card.selected {
+  border-color: var(--border-light);
+  box-shadow: 0 0 0 1px var(--border-light);
+}
+
+.card-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.card-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.agent-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  font-size: 0.75rem;
+  font-weight: 550;
+  color: var(--text-primary);
+}
+.agent-badge-pill .agent-icon-badge {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p-color, var(--text-primary));
+  background: none;
+}
+.agent-badge-pill .agent-icon-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.meta-prop-pill {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+
+.kind-pill {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+}
+.kind-pill.handoff {
+  background: var(--accent-amber-bg);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber-border);
+}
+.kind-pill.session {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.kind-pill.note {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.card-time {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.card-title {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.card-title-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.card-title-btn:hover {
+  text-decoration: underline;
+}
+
+.card-summary {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* Notion Callout Box for Open Threads */
+.notion-callout {
+  background: var(--accent-amber-bg);
+  border: 1px solid var(--accent-amber-border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.95rem;
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+.notion-callout > svg {
+  color: var(--accent-amber);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.callout-content {
+  flex: 1;
+  min-width: 0;
+}
+.callout-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-amber);
+  margin: 0 0 0.35rem;
+}
+.todo-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.todo-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+.todo-item svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  position: relative;
+  top: 1px;
+}
+
+/* Notion Toggle Disclosure Blocks */
+.toggle-block {
+  margin-top: 0.65rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toggle-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+.toggle-header-btn:hover {
+  color: var(--text-primary);
+}
+.toggle-triangle {
+  font-size: 0.65rem;
+  transition: transform 0.15s ease;
+}
+.toggle-triangle.open {
+  transform: rotate(90deg);
+}
+
+.bullet-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.bullet-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+.bullet-dot {
+  color: var(--text-tertiary);
+}
+
+/* Files Block */
+.files-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.file-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.file-badge-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-light);
+}
+
+/* Tags Block */
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.notion-tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  background: var(--tag-bg);
+  color: var(--tag-text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* Card Action Footer */
+.card-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.action-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.action-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.action-pill-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.id-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================
+   Modal & Toast
+   ============================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal-backdrop.open {
+  display: flex;
+}
+
+.modal-dialog {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 620px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+}
+.modal-header {
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+}
+.modal-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 2px;
+}
+.modal-body {
+  padding: 1rem;
+  overflow-y: auto;
+}
+.code-container {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+}
+.modal-footer {
+  padding: 0.65rem 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.toast-box {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(30px);
+  background: var(--card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 0.45rem 1.1rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.18s ease;
+}
+.toast-box.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.empty-block {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 820px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+  .sidebar {
+    position: static;
+  }
+  .nav-center {
+    max-width: 160px;
+  }
 }
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="wordmark">ultrateam<span class="cursor-blink" aria-hidden="true"></span></div>
-  <div class="tagline">The shared watch log of this machine's coding agents</div>
-  <div class="controls">
-    <select id="project" aria-label="Project"></select>
-    <input class="search" id="q" type="search" placeholder="Search the log…" aria-label="Search the log">
-    <button class="ghost" id="theme" aria-label="Switch theme">theme</button>
+
+<!-- SVG Sprite -->
+<svg style="display:none;" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Claude Official Starburst Icon (Full Bleed Optical Scale) -->
+    <symbol id="icon-claude" viewBox="0 0 24 24">
+      <path fill="currentColor" fill-rule="nonzero" d="M4.766 15.927l4.68-2.626.079-.228-.079-.127-.228 0-.782-.048-2.674-.072-2.319-.096-2.247-.12-.565-.12-.53-.699.055-.348.475-.32.681.059 1.505.103 2.258.156 1.638.096 2.427.252h.385l.055-.156-.132-.096-.103-.096-2.337-1.584-2.53-1.674-1.325-.964-.716-.488-.361-.458-.156-.999.651-.716.874.059.223.059.885.681 1.89 1.463 2.469 1.818.361.3.145-.103.018-.072-.162-.271-1.343-2.427-1.433-2.469-.638-1.023-.169-.614c-.059-.252-.103-.464-.103-.723l0.74-1.005.41-.132.988.132.416.361.614 1.404.994 2.21 1.542 3.005.451.891.241.826.09.252.156 0v-.145l0.127-1.693.234-2.078.228-2.674.079-.753.373-.903.74-.488.578.276.475.681-.066.44-.283 1.837-.554 2.878-.361 1.927h0.211l0.241-.241.975-1.295 1.638-2.048.723-.813.843-.898.541-.427 1.023 0 .753 1.119-.337 1.156-1.054 1.336-.874 1.132-1.253 1.686-.782 1.349.072.108.186-.018 2.83-.602 1.529-.276 1.825-.313.826.385.09.392-.324.801-1.951.482-2.289.458-3.408.806-.042.031.048.059 1.536.145.657.035h1.608l2.994.223.782.517.469.633-.079.482-1.205.614-1.625-.385-3.794-.903-1.301-.324-.18 0v.108l1.084 1.06 1.987 1.794 2.488 2.313.127.572-.32.451-.337-.048-2.186-1.645-.843-.74-1.91-1.608-.127 0v.169l0.44.644 2.324 3.493.12 1.071-.169.349-.602.21-.662-.12-1.36-1.91-1.404-2.151-1.132-1.927-.138.079-.668 7.197-.313.368-.723.276-.602-.458-.32-.74.32-1.463.385-1.91.313-1.518.283-1.886.169-.626-.011-.042-.138.018-1.422 1.951-2.162 2.922-1.711 1.831-.41.162-.71-.368.066-.657.397-.585 2.368-3.012 1.428-1.866.922-1.078-.006-.156h-.055l-6.288 4.083-1.12.145-.482-.451.059-.74.228-.241 1.89-1.301-.006.006.002.006z"/>
+    </symbol>
+    <!-- OpenAI Official Brand Icon -->
+    <symbol id="icon-openai" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
+    </symbol>
+    <!-- Google Gemini Official Brand Icon -->
+    <symbol id="icon-google" viewBox="1 1 22 22">
+      <path fill="currentColor" d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81Z"/>
+    </symbol>
+    <!-- GitHub Copilot Official Brand Icon -->
+    <symbol id="icon-githubcopilot" viewBox="-0.6 0.8 25.2 21.6">
+      <path fill="currentColor" d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/>
+    </symbol>
+    <!-- Cursor Official Brand Icon -->
+    <symbol id="icon-cursor" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/>
+    </symbol>
+    <!-- Human Icon -->
+    <symbol id="icon-human" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+    </symbol>
+    <!-- Folder Icon -->
+    <symbol id="icon-folder" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+    </symbol>
+    <!-- Git Branch Icon -->
+    <symbol id="icon-branch" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M6 3a3 3 0 1 0 2.83 4H15a3 3 0 0 1 3 3v4.17A3.001 3.001 0 1 0 20 17v-4a5 5 0 0 0-5-5H8.83A3.001 3.001 0 0 0 6 3zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm12 14a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM6 9a1 1 0 0 0-1 1v7.17a3.001 3.001 0 1 0 2 0V10a1 1 0 0 0-1-1zm0 10a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+    </symbol>
+    <!-- File Icon -->
+    <symbol id="icon-file" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+    </symbol>
+    <!-- Search Icon -->
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+    </symbol>
+    <!-- Sun Icon (8-Ray Solar Vector) -->
+    <symbol id="icon-sun" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06a.996.996 0 0 0 0-1.41zM7.05 18.36l-1.06 1.06a.996.996 0 0 0 0 1.41.996.996 0 0 0 1.41 0l1.06-1.06c.39-.39.39-1.03 0-1.41s-1.02-.39-1.41 0z"/>
+    </symbol>
+    <!-- Moon Icon -->
+    <symbol id="icon-moon" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12.3 2a10 10 0 0 0-.19 1.4 10 10 0 0 0 10.89 10.89c.47 0 .94-.06 1.4-.19a10 10 0 1 1-12.1-12.1z"/>
+    </symbol>
+    <!-- Book Icon -->
+    <symbol id="icon-book" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M18 2H6c-1.2 0-2 .8-2 2v16c0 1.2.8 2 2 2h12c1.2 0 2-.8 2-2V4c0-1.2-.8-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/>
+    </symbol>
+    <!-- Alert Icon -->
+    <symbol id="icon-alert" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.5L20.3 19H3.7L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+    </symbol>
+    <!-- Checkbox Icon -->
+    <symbol id="icon-check-square" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
+    </symbol>
+    <!-- Layers Icon -->
+    <symbol id="icon-layers" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z"/>
+    </symbol>
+    <!-- Ultrateam Official Logo (Modern Tech Dimensional Isometric Cube) -->
+    <symbol id="icon-ultrateam" viewBox="0 0 24 24">
+      <path fill="currentColor" fill-opacity="0.95" d="M12 2.2L20.8 7.3 12 12.4 3.2 7.3 12 2.2z"/>
+      <path fill="currentColor" fill-opacity="0.65" d="M3.2 8.4L12 13.5v9.3L3.2 17.7V8.4z"/>
+      <path fill="currentColor" fill-opacity="0.4" d="M12 13.5l8.8-5.1v9.3L12 22.8v-9.3z"/>
+    </symbol>
+    <!-- Copy Icon -->
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- Top Navbar -->
+<header class="nav-bar">
+  <div class="nav-left">
+    <a href="#" class="breadcrumb-root" onclick="resetFilters(); return false;" title="Reset filters">
+      <svg class="ultrateam-logo-icon" viewBox="0 0 24 24"><use href="#icon-ultrateam"/></svg>
+      <span class="ultrateam-logo-text">ultrateam</span>
+    </a>
+  </div>
+
+  <div class="nav-center">
+    <div class="search-container">
+      <svg class="search-icon-svg" viewBox="0 0 24 24"><use href="#icon-search"/></svg>
+      <input type="search" id="search-input" class="search-box" placeholder="Search diary entries, decisions, files…" autocomplete="off" spellcheck="false" aria-label="Search diary">
+      <button id="search-clear" class="search-clear-btn" title="Clear search">✕</button>
+      <span class="search-shortcut">⌘K</span>
+    </div>
+  </div>
+
+  <div class="nav-right">
+    <button id="theme-btn" class="nav-btn icon-only" title="Toggle theme">
+      <svg viewBox="0 0 24 24" width="13" height="13" id="theme-icon"><use href="#icon-sun"/></svg>
+    </button>
   </div>
 </header>
 
-<main class="layout">
-  <aside class="rail">
-    <section class="statsbox">
-      <h2 class="eyebrow">This log</h2>
-      <div class="stats" id="stats"></div>
-    </section>
-    <section class="activity">
-      <h2 class="eyebrow">Last 14 days</h2>
-      <ul class="strip" id="strip" aria-label="Entries per day, last 14 days"></ul>
-      <div class="axis"><span id="ax-from"></span><span>today</span></div>
-    </section>
-    <section>
-      <h2 class="eyebrow">Roster</h2>
-      <div class="roster" id="roster"></div>
-    </section>
+<!-- Main Workspace -->
+<div class="workspace">
+  <!-- Left Navigation & Stats -->
+  <aside class="sidebar">
+    <!-- Models & Agents List (Above Workspaces) -->
+    <div>
+      <h3 class="sidebar-group-title">Models & Agents</h3>
+      <div class="nav-list" id="roster-list"></div>
+    </div>
+
+    <!-- Workspaces List -->
+    <div>
+      <h3 class="sidebar-group-title">Workspaces</h3>
+      <div class="nav-list" id="project-nav-list"></div>
+    </div>
   </aside>
-  <section class="feed anim" id="feed"></section>
-</main>
-<div class="tip" id="tip"></div>
+
+  <!-- Main Document Page -->
+  <main class="document-main">
+    <!-- Page Header (Notion Database Page Top) -->
+    <div class="page-header">
+      <div class="page-title-row">
+        <h1 class="page-title" id="page-title-text">Shared Agent Diary</h1>
+      </div>
+
+      <!-- Properties Grid -->
+      <div class="properties-grid">
+        <div class="property-chip">
+          <span class="property-label">Total Entries</span>
+          <span class="property-value" id="stat-total">0</span>
+        </div>
+        <div class="property-chip">
+          <span class="property-label">Handoffs</span>
+          <span class="property-value" style="color:var(--accent-amber);" id="stat-handoffs">0</span>
+        </div>
+        <div class="property-chip">
+          <span class="property-label">Open Threads</span>
+          <span class="property-value" id="stat-threads">0</span>
+        </div>
+        <div class="property-chip">
+          <span class="property-label">Active Agents</span>
+          <span class="property-value" id="stat-agents">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notion Database Views Bar -->
+    <div class="views-toolbar">
+      <div class="views-tabs">
+        <button class="view-tab-btn active" data-kind="all">
+          <span>All</span>
+          <span class="view-tab-count" id="badge-all">0</span>
+        </button>
+        <button class="view-tab-btn" data-kind="handoff">
+          <span>⇄ Handoffs</span>
+          <span class="view-tab-count" id="badge-handoff">0</span>
+        </button>
+        <button class="view-tab-btn" data-kind="session">
+          <span>Checkpoints</span>
+          <span class="view-tab-count" id="badge-session">0</span>
+        </button>
+        <button class="view-tab-btn" data-kind="note">
+          <span>Notes</span>
+          <span class="view-tab-count" id="badge-note">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Feed Stream -->
+    <div class="timeline-feed" id="feed-stream"></div>
+  </main>
+</div>
+
+<!-- Raw JSON Modal -->
+<div class="modal-backdrop" id="json-modal" onclick="if(event.target===this)closeJsonModal()">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title" id="json-modal-title">Entry JSON</h3>
+      <button class="modal-close-btn" onclick="closeJsonModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <pre class="code-container" id="json-modal-content"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="action-pill-btn" id="json-copy-btn">
+        <svg viewBox="0 0 24 24" width="11" height="11"><use href="#icon-copy"/></svg>
+        <span>Copy JSON</span>
+      </button>
+      <button class="action-pill-btn" onclick="closeJsonModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-box" id="toast-hud"></div>
 
 <script>
 'use strict';
-/* All rendering goes through h(): strings become text nodes, never markup —
-   entry content is arbitrary text written by agents and must not execute. */
-function h(tag, attrs, ...kids) {
+
+const state = {
+  scope: null,
+  query: '',
+  kindFilter: 'all',
+  agentFilter: null,
+  openIds: new Set(),
+  selectedIndex: -1,
+  data: null,
+  rawPayload: '',
+  seq: 0,
+};
+
+const PROVIDER_METADATA = {
+  claude:    { icon: '#icon-claude',        color: 'var(--p-anthropic)', name: 'Claude Code' },
+  anthropic: { icon: '#icon-claude',        color: 'var(--p-anthropic)', name: 'Anthropic Claude' },
+  openai:    { icon: '#icon-openai',        color: 'var(--p-openai)',    name: 'OpenAI' },
+  google:    { icon: '#icon-google',        color: 'var(--p-google)',    name: 'Google Gemini' },
+  github:    { icon: '#icon-githubcopilot', color: 'var(--p-github)',    name: 'GitHub Copilot' },
+  cursor:    { icon: '#icon-cursor',        color: 'var(--p-cursor)',    name: 'Cursor' },
+  human:     { icon: '#icon-human',         color: 'var(--p-human)',     name: 'Human' },
+  other:     { icon: '#icon-file',          color: 'var(--p-other)',     name: 'Agent' },
+};
+
+function getProviderMeta(agentName, provider) {
+  const an = (agentName || '').toLowerCase();
+  const pr = (provider || '').toLowerCase();
+
+  if (an.includes('claude') || an.includes('anthropic') || pr.includes('anthropic') || pr.includes('claude')) {
+    return PROVIDER_METADATA.claude;
+  }
+  if (an.includes('copilot') || pr.includes('github') || pr.includes('copilot')) {
+    return PROVIDER_METADATA.github;
+  }
+  if (an.includes('gemini') || an.includes('antigravity') || pr.includes('google')) {
+    return PROVIDER_METADATA.google;
+  }
+  if (an.includes('cursor') || pr.includes('cursor')) {
+    return PROVIDER_METADATA.cursor;
+  }
+  if (an.includes('codex') || an.includes('gpt') || pr.includes('openai')) {
+    return PROVIDER_METADATA.openai;
+  }
+  if (an.includes('human') || pr.includes('human')) {
+    return PROVIDER_METADATA.human;
+  }
+  return PROVIDER_METADATA.other;
+}
+
+function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (k === 'class') el.className = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (v !== null && v !== undefined) el.setAttribute(k, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k.startsWith('style') && typeof v === 'string') el.style.cssText = v;
+    else if (v !== null && v !== undefined && v !== false) el.setAttribute(k, v === true ? '' : v);
   }
-  for (const kid of kids.flat()) {
-    if (kid === null || kid === undefined) continue;
-    el.append(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+  for (const child of children.flat(Infinity)) {
+    if (child === null || child === undefined) continue;
+    el.append(typeof child === 'string' ? document.createTextNode(child) : child);
   }
   return el;
 }
-const $ = (s) => document.querySelector(s);
-/* replaceChildren stringifies arrays — always go through this. */
-function setChildren(el, ...kids) {
-  el.replaceChildren(...kids.flat(Infinity).filter((k) => k !== null && k !== undefined));
+
+function svgIcon(iconId, width = 12, height = 12) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', iconId);
+  svg.appendChild(use);
+  return svg;
 }
 
-/* Only the three validated categorical slots carry hue; every other provider
-   deliberately shares the neutral — identity is icon + name, never color. */
-const PROVIDER_CLASS = {
-  anthropic: 'p-anthropic',
-  openai: 'p-openai',
-  github: 'p-github',
-  cursor: 'p-cursor',
-};
-const pClass = (provider) => PROVIDER_CLASS[provider] || 'p-other';
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-const state = {
-  scope: null,        // project path or 'all'
-  q: '',
-  agentFilter: null,  // roster filter, client-side
-  openIds: new Set(),
-  data: null,
-  raw: '',            // last payload, for change detection
-  seq: 0,             // in-flight request sequencing
-  hasPainted: false,  // entrance animation runs once
-};
+function setChildren(el, ...children) {
+  el.replaceChildren(...children.flat(Infinity).filter((c) => c !== null && c !== undefined));
+}
 
-/* ---------- formatting ---------- */
 function timeAgo(iso) {
   const ms = Date.now() - Date.parse(iso);
-  if (!(ms >= 0)) return '';
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return m + 'm ago';
-  const hr = Math.floor(m / 60);
-  if (hr < 24) return hr + 'h ago';
-  const d = Math.floor(hr / 24);
-  if (d < 30) return d + 'd ago';
-  return Math.floor(d / 30) + 'mo ago';
-}
-const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-function dayKey(iso) { const d = new Date(iso); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
-function dayLabel(iso) {
-  const d = new Date(iso);
-  const today = new Date();
-  const sameDay = (a, b) => a.toDateString() === b.toDateString();
-  if (sameDay(d, today)) return 'WATCH OF TODAY';
-  const y = new Date(today); // calendar arithmetic — a flat -24h is wrong across DST
-  y.setDate(y.getDate() - 1);
-  if (sameDay(d, y)) return 'WATCH OF YESTERDAY';
-  return 'WATCH OF ' + DAYS[d.getDay()] + ' · ' + MONTHS[d.getMonth()] + ' ' + d.getDate();
-}
-function clock(iso) {
-  const d = new Date(iso);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (isNaN(ms) || ms < 0) return 'just now';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 45) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return 'yesterday';
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  return `${mo}mo ago`;
 }
 
-/* ---------- data ---------- */
-async function refresh() {
-  const my = ++state.seq;
-  const p = new URLSearchParams();
-  if (state.scope) p.set('project', state.scope);
-  if (state.q) p.set('q', state.q);
+function fullDateTime(iso) {
   try {
-    const res = await fetch('/api/state?' + p.toString());
-    if (my !== state.seq) return; // a newer request superseded this one
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  } catch {
+    return iso;
+  }
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function dayKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+async function fetchState() {
+  const currentSeq = ++state.seq;
+  const params = new URLSearchParams();
+  if (state.scope) params.set('project', state.scope);
+  if (state.query) params.set('q', state.query);
+
+  try {
+    const res = await fetch('/api/state?' + params.toString());
+    if (currentSeq !== state.seq) return;
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const raw = await res.text();
-    if (my !== state.seq) return;
-    if (raw === state.raw) return; // nothing changed — leave the DOM alone
-    state.raw = raw;
+    if (currentSeq !== state.seq) return;
+    if (raw === state.rawPayload) return;
+    state.rawPayload = raw;
     state.data = JSON.parse(raw);
     if (!state.scope) state.scope = state.data.scope;
     render();
   } catch (err) {
-    if (my !== state.seq) return;
-    setChildren($('#feed'),
-      h('div', { class: 'blank' },
-        h('p', {}, 'The viewer lost contact with the ultrateam server.'),
-        h('p', {}, 'Restart it with ', h('code', {}, 'ultrateam view'), ' and reload this page.')),
-    );
+    if (currentSeq !== state.seq) return;
+    renderError(err.message);
   }
 }
 
-/* ---------- render ---------- */
 function render() {
   const d = state.data;
-  renderProjects(d);
-  const entries = state.agentFilter
-    ? d.entries.filter((e) => e.agent.name === state.agentFilter)
-    : d.entries;
-  renderStats(d);
-  renderActivity(d.activityTs);
+  if (!d) return;
+
+  renderOverview(d);
   renderRoster(d);
-  renderFeed(entries, d);
-  if (!state.hasPainted) {
-    state.hasPainted = true;
-    // drop the entrance-animation class once the first rise has finished so
-    // later re-renders never replay it
-    setTimeout(() => $('#feed').classList.remove('anim'), 1000);
-  }
-  const scopeName = d.scope === 'all' ? 'all projects'
-    : (d.projects.find((p) => p.path === d.scope) || {}).name || 'project';
-  document.title = 'ultrateam — ' + scopeName;
+  renderProjectNav(d);
+  renderFeed(d);
+  updateThemeIcon();
+
+  const currentProjectName = d.scope === 'all'
+    ? 'All Workspaces'
+    : (d.projects.find((p) => p.path === d.scope)?.name || 'Workspace');
+  $('#page-title-text').textContent = currentProjectName;
+  document.title = `ultrateam — ${currentProjectName}`;
 }
 
-function renderProjects(d) {
-  const sel = $('#project');
-  if (document.activeElement === sel) return; // never rebuild an open dropdown
-  setChildren(sel,
-    h('option', { value: 'all' }, 'all projects'),
-    d.projects.map((p) => h('option', { value: p.path }, p.name + ' (' + p.count + ')')),
-  );
-  sel.value = d.scope;
+function renderOverview(d) {
+  $('#stat-total').textContent = String(d.stats.entries || 0);
+  $('#stat-handoffs').textContent = String(d.stats.handoffs || 0);
+  $('#stat-threads').textContent = String(d.stats.openThreads || 0);
+  $('#stat-agents').textContent = String(d.agents ? d.agents.length : 0);
 }
-
-/* Stat tiles come from d.stats: scope-wide SQL truth, immune to the feed's
-   200-entry cap, search ordering, and the roster filter. */
-function renderStats(d) {
-  setChildren($('#stats'),
-    tile(d.stats.entries, d.stats.entries === 1 ? 'entry' : 'entries'),
-    tile(d.agents.length, 'on roster'),
-    tile(d.stats.handoffs, 'handoffs'),
-    tile(d.stats.openThreads, 'open threads'),
-  );
-}
-const tile = (v, l) => h('div', { class: 'tile' }, h('div', { class: 'v' }, String(v)), h('div', { class: 'l' }, l));
-
-function renderActivity(activityTs) {
-  const days = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    days.push({ key: dayKey(d.toISOString()), label: MONTHS[d.getMonth()] + ' ' + d.getDate(), n: 0 });
-  }
-  const byKey = new Map(days.map((x) => [x.key, x]));
-  for (const ts of activityTs) {
-    const hit = byKey.get(dayKey(ts));
-    if (hit) hit.n++;
-  }
-  const max = Math.max(1, ...days.map((x) => x.n));
-  $('#ax-from').textContent = days[0].label.toLowerCase();
-  setChildren($('#strip'), days.map((x) => {
-    const label = x.n + (x.n === 1 ? ' entry' : ' entries') + ' · ' + x.label;
-    return h('li', {
-      class: 'cell' + (x.n === 0 ? ' zero' : ''),
-      tabindex: '0',
-      'aria-label': label,
-      onmousemove: (ev) => showTipAt(ev.clientX, ev.clientY, label),
-      onmouseleave: hideTip,
-      onfocus: (ev) => { const r = ev.target.getBoundingClientRect(); showTipAt(r.left, r.top, label); },
-      onblur: hideTip,
-    }, h('div', { class: 'bar', style: 'height:' + Math.round((x.n / max) * 100) + '%' }));
-  }));
-}
-function showTipAt(x, y, text) {
-  const tip = $('#tip');
-  tip.textContent = text;
-  tip.style.display = 'block';
-  tip.style.left = Math.min(x + 12, window.innerWidth - 150) + 'px';
-  tip.style.top = Math.max(4, y - 34) + 'px';
-}
-function hideTip() { $('#tip').style.display = 'none'; }
 
 function renderRoster(d) {
-  if (d.agents.length === 0) {
-    setChildren($('#roster'), h('div', { class: 'sub', style: 'color:var(--ink-3);font-size:12px' }, 'No agents on watch yet.'));
-    return;
-  }
-  setChildren($('#roster'), d.agents.map((a) =>
-    h('button', {
-      class: 'member ' + pClass(a.meta.provider),
-      'aria-pressed': String(state.agentFilter === a.name),
-      onclick: () => { state.agentFilter = state.agentFilter === a.name ? null : a.name; render(); },
+  const list = $('#roster-list');
+  const totalEntries = d.stats.entries || 0;
+  const isAllActive = state.agentFilter === null;
+
+  const allItem = h('button', {
+    class: `agent-item-btn ${isAllActive ? 'active' : ''}`,
+    onclick: () => {
+      state.agentFilter = null;
+      render();
     },
-      h('span', { class: 'dot', 'aria-hidden': 'true' }),
-      h('span', { class: 'who' },
-        h('div', { class: 'name' }, a.meta.icon + ' ' + a.meta.display),
-        h('div', { class: 'sub' }, a.models.length ? a.models.join(', ') : timeAgo(a.lastTs)),
+  },
+    h('div', { style: 'display:flex;align-items:center;gap:0.45rem;min-width:0;' },
+      h('div', { class: 'agent-icon-badge', style: '--p-color:var(--text-secondary);' },
+        svgIcon('#icon-layers', 12, 12)
       ),
-      h('span', { class: 'n' }, String(a.count)),
+      h('span', { class: 'agent-name-text' }, 'All')
     ),
-  ));
-}
+    h('span', { class: 'nav-count-pill' }, String(totalEntries))
+  );
 
-function renderFeed(entries, d) {
-  const feed = $('#feed');
-  const bits = [];
-  const noteBits = [];
-  if (state.q) {
-    noteBits.push(
-      entries.length + (entries.length === 1 ? ' entry' : ' entries') + ' ranked by relevance for “' + state.q + '”',
-      h('button', { class: 'ghost', onclick: clearSearch }, 'clear'),
-    );
-  }
-  if (state.agentFilter) {
-    noteBits.push(
-      (state.q ? '· only ' : 'Showing only ') + state.agentFilter,
-      h('button', { class: 'ghost', onclick: () => { state.agentFilter = null; render(); } }, 'show everyone'),
-    );
-  }
-  if (noteBits.length > 0) bits.push(h('p', { class: 'feed-note' }, noteBits));
-  if (entries.length === 0) {
-    bits.push(h('div', { class: 'blank' },
-      state.q
-        ? h('p', {},
-            'Nothing in the log matches “' + state.q + '”' +
-            (state.agentFilter ? ' from ' + state.agentFilter : '') + '. ' +
-            (state.agentFilter ? 'Clear the roster filter or try fewer words.' : 'Try fewer words.'))
-        : state.agentFilter
-          ? h('p', {}, 'No entries from ' + state.agentFilter + ' in this scope.')
-          : h('div', {},
-              h('p', {}, 'The log is empty.'),
-              h('p', {}, 'Agents write entries as they work — run ', h('code', {}, 'ultrateam init'), ' in a project to put them on watch.')),
-    ));
-    setChildren(feed, bits);
+  if (!d.agents || d.agents.length === 0) {
+    setChildren(list, allItem);
     return;
   }
-  let currentDay = null;
-  let group = null;
-  let i = 0;
-  for (const e of entries) {
-    const k = state.q ? '__ranked' : dayKey(e.ts);
-    if (k !== currentDay) {
-      currentDay = k;
-      group = h('section', { class: 'day' },
-        state.q ? null : h('h2', { class: 'eyebrow' }, dayLabel(e.ts)));
-      bits.push(group);
-    }
-    group.append(renderEntry(e, Math.min(i++, 12), d));
-  }
-  setChildren(feed, bits);
+
+  const agentItems = d.agents.map((a) => {
+    const meta = getProviderMeta(a.name, a.meta?.provider || a.provider);
+    const isActive = state.agentFilter === a.name;
+    const modelsStr = a.models && a.models.length ? a.models.join(', ') : timeAgo(a.lastTs);
+
+    return h('button', {
+      class: `agent-item-btn ${isActive ? 'active' : ''}`,
+      onclick: () => {
+        state.agentFilter = state.agentFilter === a.name ? null : a.name;
+        render();
+      },
+    },
+      h('div', { style: 'display:flex;align-items:center;gap:0.45rem;min-width:0;' },
+        h('div', { class: 'agent-icon-badge', style: `--p-color:${meta.color};` },
+          svgIcon(meta.icon, 13, 13)
+        ),
+        h('div', { style: 'min-width:0;' },
+          h('div', { class: 'agent-name-text' }, a.meta?.display || a.name),
+          h('div', { class: 'agent-model-text', title: modelsStr }, modelsStr)
+        )
+      ),
+      h('span', { class: 'nav-count-pill' }, String(a.count))
+    );
+  });
+
+  setChildren(list, allItem, ...agentItems);
 }
 
-function renderEntry(e, i, d) {
-  // The watch line answers "who was on duty" — color follows the agent's home
-  // provider (stable per agent); the model provider stays visible as text.
-  const cls = pClass(e.meta.provider) + (e.kind === 'handoff' ? ' handoff' : '');
-  const open = state.openIds.has(e.id);
-  const showProject = d.scope === 'all';
-  const detailId = 'detail-' + e.id;
+function renderProjectNav(d) {
+  const list = $('#project-nav-list');
+  const items = [
+    { path: 'all', name: 'All', count: d.stats.entries },
+    ...d.projects,
+  ];
+
+  setChildren(list, items.map((p) => {
+    const isActive = (state.scope === p.path) || (p.path === 'all' && state.scope === 'all');
+    return h('button', {
+      class: `nav-item-btn ${isActive ? 'active' : ''}`,
+      onclick: () => {
+        state.scope = p.path;
+        state.agentFilter = null;
+        fetchState();
+      },
+    },
+      h('div', { class: 'nav-item-left' },
+        svgIcon('#icon-folder', 13, 13),
+        h('span', { class: 'nav-item-label' }, p.name)
+      ),
+      h('span', { class: 'nav-count-pill' }, String(p.count || 0))
+    );
+  }));
+}
+
+function renderFeed(d) {
+  let entries = d.entries || [];
+
+  const totalHandoffs = entries.filter((e) => e.kind === 'handoff').length;
+  const totalSessions = entries.filter((e) => e.kind === 'session').length;
+  const totalNotes = entries.filter((e) => e.kind === 'note').length;
+  $('#badge-all').textContent = String(entries.length);
+  $('#badge-handoff').textContent = String(totalHandoffs);
+  $('#badge-session').textContent = String(totalSessions);
+  $('#badge-note').textContent = String(totalNotes);
+
+  if (state.kindFilter === 'handoff') entries = entries.filter((e) => e.kind === 'handoff');
+  else if (state.kindFilter === 'session') entries = entries.filter((e) => e.kind === 'session');
+  else if (state.kindFilter === 'note') entries = entries.filter((e) => e.kind === 'note');
+
+  if (state.agentFilter) {
+    entries = entries.filter((e) => e.agent?.name === state.agentFilter);
+  }
+
+  const stream = $('#feed-stream');
+  if (entries.length === 0) {
+    setChildren(stream,
+      h('div', { class: 'empty-block' },
+        h('p', { style: 'margin:0;font-size:0.85rem;' }, 'No matching diary entries found.')
+      )
+    );
+    return;
+  }
+
+  setChildren(stream, entries.map((entry, index) => renderCard(entry, index, d)));
+}
+
+function renderCard(entry, index, d) {
+  const providerMeta = getProviderMeta(entry.agent?.name || entry.meta?.display, entry.agent?.provider || entry.meta?.provider);
+  const isOpen = state.openIds.has(entry.id);
+  const isHandoff = entry.kind === 'handoff';
+  const isSelected = state.selectedIndex === index;
+
   const card = h('article', {
-    class: 'card' + (open ? ' open' : ''),
-    'data-id': e.id,
-    onclick: (ev) => { if (!ev.target.closest('button')) toggle(e.id); },
+    class: `notion-card ${isSelected ? 'selected' : ''}`,
+    'data-id': entry.id,
   },
-    h('div', { class: 'meta' },
-      h('span', { class: 't' }, clock(e.ts)),
-      h('span', { class: 'who' }, e.meta.icon + ' ' + e.meta.display),
-      e.agent.model ? h('span', {}, e.agent.model) : null,
-      h('span', { class: 'badge' }, e.kind === 'handoff' ? '⇄ handoff' : e.kind),
-      e.branch ? h('span', {}, e.branch) : null,
-      showProject ? h('span', {}, e.project) : null,
-      h('span', { class: 't', title: e.ts }, timeAgo(e.ts)),
+    // Header Line
+    h('div', { class: 'card-header-line' },
+      h('div', { class: 'card-meta-left' },
+        h('div', { class: 'agent-badge-pill' },
+          h('div', { class: 'agent-icon-badge', style: `--p-color:${providerMeta.color};` },
+            svgIcon(providerMeta.icon, 13, 13)
+          ),
+          h('span', {}, entry.meta?.display || entry.agent?.name)
+        ),
+        entry.agent?.model ? h('span', { class: 'meta-prop-pill' }, entry.agent.model) : null,
+        entry.branch ? h('span', { class: 'meta-prop-pill' },
+          svgIcon('#icon-branch', 9, 9),
+          h('span', { style: 'margin-left:2px;' }, entry.branch)
+        ) : null,
+        d.scope === 'all' && entry.project ? h('span', { class: 'meta-prop-pill' }, entry.project) : null,
+        h('span', { class: `kind-pill ${entry.kind}` }, entry.kind === 'handoff' ? '⇄ handoff' : entry.kind)
+      ),
+      h('span', { class: 'card-time', title: fullDateTime(entry.ts) }, timeAgo(entry.ts))
     ),
-    h('h3', {},
+
+    // Title & Summary
+    h('h3', { class: 'card-title' },
       h('button', {
-        class: 'tbtn',
-        'aria-expanded': String(open),
-        'aria-controls': detailId,
-        onclick: () => toggle(e.id),
-      }, e.title),
+        class: 'card-title-btn',
+        onclick: () => toggleCard(entry.id),
+      }, entry.title)
     ),
-    h('p', { class: 'sum' }, e.summary),
-    h('div', { class: 'detail', id: detailId },
-      e.open_threads.length ? h('div', {}, h('h4', {}, 'Open threads'), h('ul', { class: 'threads' }, e.open_threads.map((t) => h('li', {}, t)))) : null,
-      e.decisions.length ? h('div', {}, h('h4', {}, 'Decisions'), h('ul', {}, e.decisions.map((t) => h('li', {}, t)))) : null,
-      e.files.length ? h('div', {}, h('h4', {}, 'Files'), h('div', { class: 'chips' }, e.files.map((f) => h('span', { class: 'chip' }, f)))) : null,
-      e.tags.length ? h('div', {}, h('h4', {}, 'Tags'), h('div', { class: 'chips' }, e.tags.map((t) => h('span', { class: 'chip' }, t)))) : null,
-      h('div', { class: 'idline' }, e.id + ' · ' + e.projectPath),
-    ),
+    h('p', { class: 'card-summary' }, entry.summary),
+
+    // Notion-Style Callout for Open Threads (Handoff Next Agent Briefing)
+    entry.open_threads && entry.open_threads.length > 0 ? h('div', { class: 'notion-callout' },
+      svgIcon('#icon-alert', 14, 14),
+      h('div', { class: 'callout-content' },
+        h('div', { class: 'callout-heading' }, 'Open Threads — Next Agent Briefing'),
+        h('ul', { class: 'todo-list' }, entry.open_threads.map((t) =>
+          h('li', { class: 'todo-item' },
+            svgIcon('#icon-check-square', 12, 12),
+            h('span', {}, t)
+          )
+        ))
+      )
+    ) : null,
+
+    // Expanded Toggle Details (Decisions, Files, Tags)
+    isOpen ? h('div', { class: 'toggle-block' },
+      entry.decisions && entry.decisions.length > 0 ? h('div', {},
+        h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, 'Decisions & Rationale'),
+        h('ul', { class: 'bullet-list' }, entry.decisions.map((dec) =>
+          h('li', { class: 'bullet-item' },
+            h('span', { class: 'bullet-dot' }, '•'),
+            h('span', {}, dec)
+          )
+        ))
+      ) : null,
+
+      entry.files && entry.files.length > 0 ? h('div', {},
+        h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, `Files Touched (${entry.files.length})`),
+        h('div', { class: 'files-grid' }, entry.files.map((file) =>
+          h('button', {
+            class: 'file-badge-btn',
+            title: 'Click to copy file path',
+            onclick: () => copyText(file, `Copied ${file}`),
+          },
+            svgIcon('#icon-file', 10, 10),
+            h('span', {}, file)
+          )
+        ))
+      ) : null,
+
+      entry.tags && entry.tags.length > 0 ? h('div', { class: 'tags-row' },
+        entry.tags.map((t) => h('span', { class: 'notion-tag' }, `#${t}`))
+      ) : null
+    ) : null,
+
+    // Action Footer
+    h('div', { class: 'card-action-bar' },
+      h('div', { class: 'action-cluster' },
+        h('button', {
+          class: 'action-pill-btn',
+          onclick: () => toggleCard(entry.id),
+        }, isOpen ? 'Collapse' : 'Details'),
+        h('button', {
+          class: 'action-pill-btn',
+          title: `Copy CLI command: ultrateam show ${entry.id}`,
+          onclick: () => copyText(`ultrateam show ${entry.id}`, `Copied command: ultrateam show ${entry.id}`),
+        },
+          svgIcon('#icon-file', 10, 10),
+          h('span', {}, 'CLI show')
+        ),
+        h('button', {
+          class: 'action-pill-btn',
+          title: 'View raw JSON representation',
+          onclick: () => openJsonModal(entry),
+        }, 'JSON')
+      ),
+      h('span', { class: 'id-label' }, entry.id.slice(0, 10) + '…')
+    )
   );
-  return h('div', { class: 'entry ' + cls, style: '--i:' + i },
-    h('div', { class: 'node', 'aria-hidden': 'true' }), card);
+
+  return card;
 }
 
-/* Toggle in place: no full re-render, so focus, scroll position, and every
-   other card survive. */
-function toggle(id) {
-  const open = !state.openIds.has(id);
-  if (open) state.openIds.add(id);
-  else state.openIds.delete(id);
-  const card = document.querySelector('.card[data-id="' + CSS.escape(id) + '"]');
-  if (card) {
-    card.classList.toggle('open', open);
-    const btn = card.querySelector('.tbtn');
-    if (btn) btn.setAttribute('aria-expanded', String(open));
-  }
+function toggleCard(id) {
+  if (state.openIds.has(id)) state.openIds.delete(id);
+  else state.openIds.add(id);
+  render();
 }
-function clearSearch() { state.q = ''; $('#q').value = ''; refresh(); }
 
-/* ---------- controls ---------- */
-$('#project').addEventListener('change', (ev) => {
-  state.scope = ev.target.value;
+function resetFilters() {
+  state.query = '';
   state.agentFilter = null;
-  refresh();
+  state.kindFilter = 'all';
+  $('#search-input').value = '';
+  $('#search-clear').style.display = 'none';
+  $$('.view-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.kind === 'all'));
+  fetchState();
+}
+
+function openJsonModal(entry) {
+  const modal = $('#json-modal');
+  $('#json-modal-title').textContent = `JSON · ${entry.id}`;
+  const jsonStr = JSON.stringify(entry, null, 2);
+  $('#json-modal-content').textContent = jsonStr;
+  $('#json-copy-btn').onclick = () => copyText(jsonStr, 'JSON copied to clipboard');
+  modal.classList.add('open');
+}
+
+function closeJsonModal() {
+  $('#json-modal').classList.remove('open');
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const toast = $('#toast-hud');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function copyText(text, msg = 'Copied to clipboard') {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(msg);
+  }).catch(() => {
+    const t = document.createElement('textarea');
+    t.value = text;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand('copy');
+    document.body.removeChild(t);
+    showToast(msg);
+  });
+}
+
+function renderError(msg) {
+  setChildren($('#feed-stream'),
+    h('div', { class: 'empty-block' },
+      h('p', {}, `Unable to reach ultrateam viewer server: ${msg}`),
+      h('button', { class: 'action-pill-btn', style: 'margin-top:0.5rem;', onclick: fetchState }, 'Retry')
+    )
+  );
+}
+
+let searchTimer = null;
+const searchInput = $('#search-input');
+const searchClear = $('#search-clear');
+
+searchInput.addEventListener('input', (ev) => {
+  const val = ev.target.value.trim();
+  searchClear.style.display = val ? 'block' : 'none';
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.query = val;
+    fetchState();
+  }, 220);
 });
-let qTimer = null;
-$('#q').addEventListener('input', (ev) => {
-  clearTimeout(qTimer);
-  qTimer = setTimeout(() => { state.q = ev.target.value.trim(); refresh(); }, 250);
+
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  searchClear.style.display = 'none';
+  state.query = '';
+  fetchState();
+  searchInput.focus();
 });
-$('#theme').addEventListener('click', () => {
+
+$$('.view-tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    $$('.view-tab-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.kindFilter = btn.dataset.kind;
+    render();
+  });
+});
+
+function toggleTheme() {
+  document.documentElement.classList.add('disable-transitions');
   const cur = document.documentElement.dataset.theme;
   const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
   const next = cur ? (cur === 'dark' ? 'light' : 'dark') : (sysDark ? 'light' : 'dark');
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem('ut-theme', next); } catch {}
-});
+  updateThemeIcon();
+
+  // Force reflow and restore hover transitions cleanly in the next frame
+  window.getComputedStyle(document.documentElement).opacity;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.documentElement.classList.remove('disable-transitions');
+    });
+  });
+}
+
+function updateThemeIcon() {
+  const isLight = document.documentElement.dataset.theme === 'light' ||
+    (!document.documentElement.dataset.theme && !matchMedia('(prefers-color-scheme: dark)').matches);
+  const iconUse = $('#theme-icon use');
+  if (iconUse) {
+    iconUse.setAttribute('href', isLight ? '#icon-moon' : '#icon-sun');
+  }
+  const btn = $('#theme-btn');
+  if (btn) {
+    btn.title = isLight ? 'Switch to dark mode' : 'Switch to light mode';
+    btn.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+  }
+}
+
+$('#theme-btn').addEventListener('click', toggleTheme);
+
 try {
-  const saved = localStorage.getItem('ut-theme');
-  if (saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+  const savedTheme = localStorage.getItem('ut-theme');
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    document.documentElement.dataset.theme = savedTheme;
+  }
+  updateThemeIcon();
 } catch {}
-const urlTheme = new URLSearchParams(location.search).get('theme');
-if (urlTheme === 'dark' || urlTheme === 'light') document.documentElement.dataset.theme = urlTheme;
 
-/* live log: poll quietly while idle; unchanged payloads skip rendering, so
-   the DOM (and focus, and screen readers) stay untouched */
+window.addEventListener('keydown', (ev) => {
+  if (document.activeElement === searchInput) {
+    if (ev.key === 'Escape') {
+      searchInput.blur();
+      if (searchInput.value) {
+        searchInput.value = '';
+        state.query = '';
+        fetchState();
+      }
+    }
+    return;
+  }
+
+  if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k' || ev.key === '/') {
+    ev.preventDefault();
+    searchInput.focus();
+    searchInput.select();
+    return;
+  }
+
+  if (ev.key === 'Escape') {
+    closeJsonModal();
+    return;
+  }
+
+  if (ev.key.toLowerCase() === 't' && !ev.metaKey && !ev.ctrlKey) {
+    toggleTheme();
+    return;
+  }
+
+  const posts = $$('.notion-card');
+  if (posts.length === 0) return;
+
+  if (ev.key.toLowerCase() === 'j') {
+    state.selectedIndex = Math.min(posts.length - 1, state.selectedIndex + 1);
+    posts[state.selectedIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    render();
+  } else if (ev.key.toLowerCase() === 'k') {
+    state.selectedIndex = Math.max(0, state.selectedIndex - 1);
+    posts[state.selectedIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    render();
+  } else if (ev.key.toLowerCase() === 'o' || ev.key === 'Enter') {
+    const activeCard = posts[state.selectedIndex];
+    if (activeCard) {
+      const id = activeCard.dataset.id;
+      toggleCard(id);
+    }
+  }
+});
+
 setInterval(() => {
-  if (!document.hidden && !state.q) refresh();
-}, 20000);
+  if (!document.hidden && !state.query) {
+    fetchState();
+  }
+}, 10000);
 
-refresh();
+fetchState();
 </script>
 </body>
 </html>

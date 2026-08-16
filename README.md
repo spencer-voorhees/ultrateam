@@ -9,10 +9,10 @@ ultrateam treats the agents on your machine as what they actually are: **a team*
 ## How it works
 
 ```
-┌─────────────┐  ┌────────┐  ┌─────────┐  ┌───────┐
-│ Claude Code │  │ Cursor │  │ Copilot │  │ Codex │   ← the team
-└──────┬──────┘  └───┬────┘  └────┬────┘  └───┬───┘
-       └─────────────┴─────┬──────┴───────────┘
+┌─────────────┐  ┌────────┐  ┌─────────┐  ┌─────────┐  ┌───────┐
+│ Claude Code │  │ Cursor │  │ Copilot │  │ Gemini  │  │ Codex │   ← the team
+└──────┬──────┘  └───┬────┘  └────┬────┘  └───┬─────┘  └───┬───┘
+       └─────────────┴─────┬──────┴───────────┴────────────┘
                            │  identical MCP tools:
                            │  recall · checkpoint · handoff
                    ┌───────▼────────┐
@@ -41,7 +41,7 @@ ultrateam init               # store + AGENTS.md contract + MCP registration
 ultrateam doctor             # verify every detected agent is wired
 ```
 
-`init` detects which agents are installed and registers the server in each one's project config (`.mcp.json` for Claude Code, `.cursor/mcp.json` for Cursor, `.vscode/mcp.json` for VS Code/Copilot). That registration is the only per-agent plumbing; everything else is identical everywhere.
+`init` detects which agents are installed and registers the server in each one's project config (`.mcp.json` for Claude Code, `.cursor/mcp.json` for Cursor, `.vscode/mcp.json` for VS Code/Copilot, `.agents/mcp_config.json` for Gemini/Antigravity, `.codex/mcp.json` for Codex). That registration is the only per-agent plumbing; everything else is identical everywhere.
 
 Then just work. Agents checkpoint as they go. When you switch tools:
 

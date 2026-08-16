@@ -27,6 +27,32 @@ test('provider inference prefers model over agent default', () => {
   assert.equal(entry.agent.provider, 'openai');
 });
 
+test('provider inference handles gemini and codex', () => {
+  const geminiEntry = createEntry({
+    project: 'demo',
+    agent: { name: 'gemini', model: 'gemini-2.5-pro' },
+    title: 'Gemini session',
+    summary: 'x',
+  });
+  assert.equal(geminiEntry.agent.provider, 'google');
+
+  const antigravityEntry = createEntry({
+    project: 'demo',
+    agent: { name: 'antigravity' },
+    title: 'Antigravity session',
+    summary: 'x',
+  });
+  assert.equal(antigravityEntry.agent.provider, 'google');
+
+  const codexEntry = createEntry({
+    project: 'demo',
+    agent: { name: 'codex' },
+    title: 'Codex session',
+    summary: 'x',
+  });
+  assert.equal(codexEntry.agent.provider, 'openai');
+});
+
 test('explicit provider is not overwritten', () => {
   const entry = createEntry({
     project: 'demo',

@@ -411,23 +411,26 @@ export class Index {
     // a project ever had, not its current one).
     const rows = this.db
       .prepare(
-        `SELECT project_path AS path, project AS name, ts, 1 AS one FROM entries`,
+        `SELECT project_path AS path, project AS name, ts, id FROM entries ORDER BY ts ASC, id ASC`,
       )
-      .all() as unknown as Array<{ path: string; name: string; ts: string }>;
-    const byPath = new Map<string, ProjectSummary>();
+      .all() as unknown as Array<{ path: string; name: string; ts: string; id: string }>;
+    const byPath = new Map<string, ProjectSummary & { _lastId: string }>();
     for (const r of rows) {
       const cur = byPath.get(r.path);
       if (!cur) {
-        byPath.set(r.path, { path: r.path, name: r.name, count: 1, lastTs: r.ts });
+        byPath.set(r.path, { path: r.path, name: r.name, count: 1, lastTs: r.ts, _lastId: r.id });
       } else {
         cur.count++;
-        if (r.ts > cur.lastTs) {
+        if (r.ts > cur.lastTs || (r.ts === cur.lastTs && r.id >= cur._lastId)) {
           cur.lastTs = r.ts;
+          cur._lastId = r.id;
           cur.name = r.name;
         }
       }
     }
-    return [...byPath.values()].sort((a, b) => b.lastTs.localeCompare(a.lastTs));
+    return [...byPath.values()]
+      .map(({ _lastId, ...p }) => p)
+      .sort((a, b) => b.lastTs.localeCompare(a.lastTs));
   }
 
   agentSummaries(projectPath?: string): AgentSummary[] {
@@ -435,7 +438,7 @@ export class Index {
     // arbitrary text (commas included), so GROUP_CONCAT round-trips corrupt
     // them; and provider must be latest-wins, not MAX().
     const sql = `SELECT agent_name AS name, agent_model AS model, provider,
-                        COUNT(*) AS n, MAX(ts) AS lastTs
+                        COUNT(*) AS n, MAX(ts) AS lastTs, MAX(id) AS lastId
                  FROM entries ${projectPath ? 'WHERE project_path = ?' : ''}
                  GROUP BY agent_name, agent_model, provider`;
     const rows = (
@@ -446,24 +449,28 @@ export class Index {
       provider: string | null;
       n: number;
       lastTs: string;
+      lastId: string;
     }>;
-    const byAgent = new Map<string, AgentSummary & { _providerTs: string }>();
+    const byAgent = new Map<string, AgentSummary & { _providerTs: string; _providerId: string }>();
     for (const r of rows) {
       let a = byAgent.get(r.name);
       if (!a) {
-        a = { name: r.name, provider: null, models: [], count: 0, lastTs: '', _providerTs: '' };
+        a = { name: r.name, provider: null, models: [], count: 0, lastTs: '', _providerTs: '', _providerId: '' };
         byAgent.set(r.name, a);
       }
       a.count += r.n;
-      if (r.lastTs > a.lastTs) a.lastTs = r.lastTs;
-      if (r.lastTs > a._providerTs) {
+      if (r.lastTs > a.lastTs || (r.lastTs === a.lastTs && r.lastId >= a._providerId)) {
+        a.lastTs = r.lastTs;
+      }
+      if (r.lastTs > a._providerTs || (r.lastTs === a._providerTs && r.lastId >= a._providerId)) {
         a._providerTs = r.lastTs;
+        a._providerId = r.lastId;
         a.provider = r.provider;
       }
       if (r.model && !a.models.includes(r.model)) a.models.push(r.model);
     }
     return [...byAgent.values()]
-      .map(({ _providerTs, ...a }) => a)
+      .map(({ _providerTs, _providerId, ...a }) => a)
       .sort((a, b) => b.count - a.count);
   }
 
@@ -477,7 +484,7 @@ export class Index {
     const latest = this.db
       .prepare(
         `SELECT open_threads FROM entries ${where ? where + ' AND' : 'WHERE'} kind = 'handoff'
-         ORDER BY ts DESC LIMIT 1`,
+         ORDER BY ts DESC, id DESC LIMIT 1`,
       )
       .get(...params) as { open_threads: string } | undefined;
     let openThreads = 0;

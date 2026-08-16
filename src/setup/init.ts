@@ -70,6 +70,24 @@ export const AGENT_TARGETS: AgentTarget[] = [
       config.servers !== null &&
       'ultrateam' in (config.servers as Record<string, unknown>),
   },
+  {
+    key: 'gemini',
+    label: 'Gemini / Antigravity',
+    detect: () =>
+      fs.existsSync(path.join(os.homedir(), '.gemini')) ||
+      fs.existsSync(path.join(os.homedir(), '.agents')),
+    configPath: (root) => path.join(root, '.agents', 'mcp_config.json'),
+    ...mcpServersStyle(),
+  },
+  {
+    key: 'codex',
+    label: 'Codex',
+    detect: () =>
+      fs.existsSync(path.join(os.homedir(), '.codex')) ||
+      fs.existsSync(path.join(os.homedir(), '.openai')),
+    configPath: (root) => path.join(root, '.codex', 'mcp.json'),
+    ...mcpServersStyle(),
+  },
 ];
 
 function readJson(file: string): Record<string, unknown> {

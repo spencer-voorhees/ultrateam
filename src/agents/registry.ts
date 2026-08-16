@@ -12,7 +12,9 @@ export const AGENTS: Record<string, AgentMeta> = {
   cursor: { display: 'Cursor', provider: 'cursor', icon: '⬛' },
   copilot: { display: 'GitHub Copilot', provider: 'github', icon: '🐙' },
   codex: { display: 'Codex', provider: 'openai', icon: '🌀' },
+  gemini: { display: 'Gemini', provider: 'google', icon: '♊' },
   'gemini-cli': { display: 'Gemini CLI', provider: 'google', icon: '♊' },
+  antigravity: { display: 'Antigravity', provider: 'google', icon: '♊' },
   windsurf: { display: 'Windsurf', provider: 'windsurf', icon: '🏄' },
   opencode: { display: 'OpenCode', provider: 'opencode', icon: '⌨️' },
   zed: { display: 'Zed', provider: 'zed', icon: '⚡' },
@@ -37,7 +39,7 @@ export function normalizeAgentName(clientName: string | undefined): string | nul
   if (n.includes('cursor')) return 'cursor';
   if (n.includes('copilot') || n.includes('visual studio') || n.includes('vscode')) return 'copilot';
   if (n.includes('codex')) return 'codex';
-  if (n.includes('gemini')) return 'gemini-cli';
+  if (n.includes('gemini') || n.includes('antigravity')) return 'gemini';
   if (n.includes('windsurf')) return 'windsurf';
   if (n.includes('opencode')) return 'opencode';
   if (n.includes('zed')) return 'zed';

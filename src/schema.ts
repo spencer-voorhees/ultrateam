@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import { ulid } from 'ulid';
+import { monotonicFactory } from 'ulid';
 import { inferProvider } from './agents/registry.js';
+
+const ulid = monotonicFactory();
 
 export const AgentInfoSchema = z.object({
   name: z.string().min(1),
