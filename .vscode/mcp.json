@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "ultrateam": {
+      "type": "stdio",
+      "command": "ultrateam",
+      "args": [
+        "serve"
+      ]
+    }
+  }
+}

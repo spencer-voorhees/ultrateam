@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ultrateam": {
+      "command": "ultrateam",
+      "args": [
+        "serve"
+      ]
+    }
+  }
+}
