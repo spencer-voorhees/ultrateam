@@ -4,24 +4,19 @@
 
 You start a task in Cursor. You pick it up later in Claude Code. Tomorrow, Copilot finishes it. Today, each of those agents keeps its history in its own silo — so every switch means re-explaining everything.
 
-ultrateam treats the agents on your machine as what they actually are: **a team**. It gives them one shared session diary per project that every agent reads and writes through a single MCP server, so any agent can pick up exactly where any other left off — and you can see which agent, on which model, did what.
+ultrateam treats the agents on your machine as what they actually are: **a team**. It gives them one shared memory per project that every agent reads and writes through a single MCP server, so any agent can pick up exactly where any other left off — and you can see which agent, on which model, did what.
 
 ## How it works
 
 ```
-┌─────────────┐  ┌────────┐  ┌─────────┐  ┌─────────┐  ┌───────┐
-│ Claude Code │  │ Cursor │  │ Copilot │  │ Gemini  │  │ Codex │   ← the team
-└──────┬──────┘  └───┬────┘  └────┬────┘  └───┬─────┘  └───┬───┘
-       └─────────────┴─────┬──────┴───────────┴────────────┘
-                           │  identical MCP tools:
-                           │  resume · recall · checkpoint · handoff
-                   ┌───────▼────────┐
-                   │ ultrateam serve │
-                   └───────┬────────┘
-              ┌────────────┴─────────────┐
-   <project>/.ultrateam/         ~/.ultrateam/index.db
-      entries.jsonl                SQLite + FTS5 index
-      (source of truth)            (derived, disposable)
+        Claude Code · Cursor · Copilot · Gemini · Codex
+                            ▼
+                  ┌───────────────────┐
+                  │  ultrateam serve  │   one MCP server, four identical tools:
+                  └─────────┬─────────┘   resume · recall · checkpoint · handoff
+                            │
+                            ├──►  <project>/.ultrateam/entries.jsonl   source of truth
+                            └──►  ~/.ultrateam/index.db                SQLite + FTS5, derived
 ```
 
 Every agent follows the same protocol, installed once into `AGENTS.md` — the cross-agent instruction file they all read:
@@ -35,12 +30,26 @@ There is no per-agent behavior. An agent is "on the team" the moment it's connec
 
 ## Quickstart
 
+Install with one line — it fetches, builds, and puts `ultrateam` on your PATH.
+
+**macOS / Linux**
 ```bash
-npm install -g ultrateam     # (or: npm link, from a source checkout)
+curl -fsSL https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.sh | bash
+```
+
+**Windows (PowerShell)**
+```powershell
+irm https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.ps1 | iex
+```
+
+Then, in any project:
+```bash
 cd your-project
 ultrateam init               # store + AGENTS.md contract + MCP registration
 ultrateam doctor             # verify every detected agent is wired
 ```
+
+Prefer a manual setup? Clone the repo, then `npm install && npm run build && npm link`.
 
 `init` detects which agents are installed and registers the server in each one's project config (`.mcp.json` for Claude Code, `.cursor/mcp.json` for Cursor, `.vscode/mcp.json` for VS Code/Copilot, `.agents/mcp_config.json` for Gemini/Antigravity, `.codex/mcp.json` for Codex). That registration is the only per-agent plumbing; everything else is identical everywhere.
 
@@ -50,12 +59,12 @@ Then just work. Agents checkpoint as they go. When you switch tools:
 
 …and the new agent's `resume` restores the latest execution state no matter which agent wrote it. `recall` remains available for searching the longer trail.
 
-## The diary from the human side
+## From the human side
 
 ```bash
 ultrateam view                     # the watch log in your browser
 ultrateam list                     # recent entries: who did what, when
-ultrateam recall auth middleware   # search the diary
+ultrateam recall auth middleware   # search the shared history
 ultrateam resume                   # restore the latest session state
 ultrateam resume --id <id> --json # exact, machine-readable resume capsule
 ultrateam show <id>                # one entry in full
@@ -107,7 +116,7 @@ New checkpoints and handoffs always carry a `resume` capsule. Older handoffs rem
 
 ## Storage design: files are truth, SQLite is cache
 
-Entries live in **append-only JSONL** at `<project>/.ultrateam/entries.jsonl` — human-readable, greppable, diffable, and committable (`init` gitignores it by default; delete the ignore line to share the team diary through the repo). A **derived SQLite index** at `~/.ultrateam/index.db` powers cross-project queries and FTS5 ranked search; it can be deleted at any time and rebuilt with `ultrateam reindex`. Ranking blends full-text relevance, recency (one-week half-life), overlap with the files you're touching now, and same-branch affinity.
+Entries live in **append-only JSONL** at `<project>/.ultrateam/entries.jsonl` — human-readable, greppable, diffable, and committable (`init` gitignores it by default; delete the ignore line to share the team's history through the repo). A **derived SQLite index** at `~/.ultrateam/index.db` powers cross-project queries and FTS5 ranked search; it can be deleted at any time and rebuilt with `ultrateam reindex`. Ranking blends full-text relevance, recency (one-week half-life), overlap with the files you're touching now, and same-branch affinity.
 
 Multiple checkouts of the same work are grouped into one logical workspace. ultrateam prefers an explicit `git config ultrateam.workspaceId <id>`, otherwise it derives a stable identity from the normalized Git remote; Git worktrees fall back to their shared Git directory, and unrelated local-only repositories remain separate by absolute path. This deliberately avoids merging projects merely because their folder or entry names happen to match.
 
@@ -122,7 +131,7 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | `ultrateam view [-p port]` | Local web viewer: timeline, roster, search |
 | `ultrateam serve` | Run the MCP server (agents launch this; stdio) |
 | `ultrateam resume [query] [--id <id>] [--json]` | Restore portable execution state |
-| `ultrateam recall <query> [-f files] [-a]` | Ranked search of the diary |
+| `ultrateam recall <query> [-f files] [-a]` | Ranked search of the shared history |
 | `ultrateam list [-n] [-a]` | Recent entries with attribution |
 | `ultrateam show <id>` | One entry in full |
 | `ultrateam log -t <title> -m <summary> [...]` | Manual entry |
@@ -134,6 +143,6 @@ Early. Working today: the store, the index, the MCP server, init/doctor, the CLI
 
 - [x] **Web viewer** (`ultrateam view`) — session timeline and team roster with per-agent colors
 - [x] **Agent-agnostic resume** — structured checkpoints, exact restore, automatic Git snapshot
-- [ ] **Import** — backfill the diary from agents' native histories (Claude Code JSONL, Cursor's DB)
+- [ ] **Import** — backfill the shared history from agents' native histories (Claude Code JSONL, Cursor's DB)
 - [ ] Optional semantic search behind a flag
-- [ ] Team sync — share the diary beyond one machine
+- [ ] Team sync — share history beyond one machine
