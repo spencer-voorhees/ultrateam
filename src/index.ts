@@ -1,0 +1,11 @@
+export { EntrySchema, AgentInfoSchema, EntryKindSchema, createEntry, parseEntryLine } from './schema.js';
+export type { Entry, AgentInfo, EntryKind, NewEntryInput } from './schema.js';
+export { findProjectRoot, appendEntry, readEntries, entriesPath, STORE_DIR } from './store/jsonl.js';
+export { Index, defaultIndexPath } from './store/db.js';
+export type { RecallOptions, ScoredEntry } from './store/db.js';
+export { AGENTS, agentMeta, normalizeAgentName, inferProvider } from './agents/registry.js';
+export { formatEntry, agentLabel, timeAgo } from './format.js';
+export { CONTRACT, applyContract } from './contract.js';
+export { init, doctor } from './setup/init.js';
+export { startServer } from './server.js';
+export { VERSION } from './version.js';
