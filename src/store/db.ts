@@ -1,6 +1,7 @@
 // Derived SQLite index over every project's JSONL entries. Lives at
 // ~/.ultrateam/index.db, powers cross-project queries and FTS5 ranked recall,
-// and is disposable: `ultrateam reindex` rebuilds it from the JSONL files.
+// and is disposable: `ultrateam reindex --all` rebuilds it from the JSONL
+// files of every root in the projects.json registry.
 
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -8,6 +9,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { type Entry, EntrySchema } from '../schema.js';
 import { readEntries } from './jsonl.js';
+import { defaultRootsPath, registerRoot } from './roots.js';
+
+// Bump when the table shape changes: a mismatched index is dropped and
+// rebuilt rather than migrated — it holds nothing original.
+const SCHEMA_VERSION = 1;
 
 export function defaultIndexPath(): string {
   return path.join(os.homedir(), '.ultrateam', 'index.db');
@@ -52,6 +58,10 @@ interface EntryRow {
 const CANDIDATE_POOL = 200;
 const DEFAULT_LIMIT = 8;
 
+function sanitizeLimit(limit: number | undefined, fallback: number): number {
+  return Number.isInteger(limit) && (limit as number) > 0 ? (limit as number) : fallback;
+}
+
 function ftsBody(e: Entry): string {
   return [
     e.title,
@@ -66,15 +76,22 @@ function ftsBody(e: Entry): string {
   ].join('\n');
 }
 
-/** Turn free text into a safe FTS5 OR-query; null when no usable tokens. */
-function toFtsQuery(query: string): string | null {
-  const tokens = query.toLowerCase().match(/[a-z0-9_]+/g);
-  if (!tokens || tokens.length === 0) return null;
+/** Unicode-aware tokenizer shared by the FTS query builder and the fallback scorer. */
+function tokenize(query: string): string[] {
+  return query.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+}
+
+function toFtsQuery(tokens: string[]): string {
   return tokens.map((t) => `"${t}"`).join(' OR ');
 }
 
 function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').toLowerCase();
+}
+
+/** Overlap requires a path-segment boundary so "a.ts" never matches "schema.ts". */
+function pathsOverlap(a: string, b: string): boolean {
+  return a === b || a.endsWith('/' + b) || b.endsWith('/' + a);
 }
 
 function rowToEntry(row: EntryRow): Entry {
@@ -101,13 +118,28 @@ function rowToEntry(row: EntryRow): Entry {
 export class Index {
   readonly db: DatabaseSync;
   readonly hasFts: boolean;
+  private readonly rootsPath: string;
 
-  constructor(dbPath: string = defaultIndexPath()) {
+  constructor(dbPath: string = defaultIndexPath(), rootsPath: string = defaultRootsPath()) {
+    this.rootsPath = rootsPath;
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
+    // WAL lets other ultrateam processes read while one writes; the busy
+    // timeout makes overlapping writers wait instead of failing with SQLITE_BUSY.
+    this.db.exec('PRAGMA journal_mode = WAL;');
+    this.db.exec('PRAGMA busy_timeout = 5000;');
+
+    const versionRow = this.db.prepare('PRAGMA user_version').get() as
+      | { user_version: number }
+      | undefined;
+    const version = versionRow?.user_version ?? 0;
+    if (version !== SCHEMA_VERSION) {
+      this.db.exec('DROP TABLE IF EXISTS entries; DROP TABLE IF EXISTS entries_fts;');
+    }
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS entries (
-        id TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
         ts TEXT NOT NULL,
         project TEXT NOT NULL,
         project_path TEXT NOT NULL,
@@ -121,7 +153,8 @@ export class Index {
         files TEXT NOT NULL,
         decisions TEXT NOT NULL,
         open_threads TEXT NOT NULL,
-        tags TEXT NOT NULL
+        tags TEXT NOT NULL,
+        PRIMARY KEY (id, project_path)
       );
       CREATE INDEX IF NOT EXISTS idx_entries_ts ON entries(ts);
       CREATE INDEX IF NOT EXISTS idx_entries_project ON entries(project_path);
@@ -129,104 +162,110 @@ export class Index {
     let fts = true;
     try {
       this.db.exec(
-        `CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(id UNINDEXED, body)`,
+        `CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(id UNINDEXED, project_path UNINDEXED, body)`,
       );
     } catch {
       // SQLite build without FTS5: recall degrades to token matching in JS.
       fts = false;
     }
+    if (version !== SCHEMA_VERSION) {
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    }
     this.hasFts = fts;
   }
 
-  upsert(entry: Entry, projectPath: string): void {
-    this.db.exec('BEGIN');
+  private withTx<T>(fn: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.db
-        .prepare(
-          `INSERT OR REPLACE INTO entries
-           (id, ts, project, project_path, branch, agent_name, agent_model, provider,
-            kind, title, summary, files, decisions, open_threads, tags)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          entry.id,
-          entry.ts,
-          entry.project,
-          projectPath,
-          entry.branch,
-          entry.agent.name,
-          entry.agent.model ?? null,
-          entry.agent.provider ?? null,
-          entry.kind,
-          entry.title,
-          entry.summary,
-          JSON.stringify(entry.files),
-          JSON.stringify(entry.decisions),
-          JSON.stringify(entry.open_threads),
-          JSON.stringify(entry.tags),
-        );
-      if (this.hasFts) {
-        this.db.prepare(`DELETE FROM entries_fts WHERE id = ?`).run(entry.id);
-        this.db
-          .prepare(`INSERT INTO entries_fts (id, body) VALUES (?, ?)`)
-          .run(entry.id, ftsBody(entry));
-      }
+      const result = fn();
       this.db.exec('COMMIT');
+      return result;
     } catch (err) {
-      this.db.exec('ROLLBACK');
+      try {
+        this.db.exec('ROLLBACK');
+      } catch {
+        // connection-level failure; the original error matters more
+      }
       throw err;
     }
   }
 
-  /** Drop and re-add all of one project's entries from its JSONL file. */
+  private upsertRow(entry: Entry, projectPath: string): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO entries
+         (id, ts, project, project_path, branch, agent_name, agent_model, provider,
+          kind, title, summary, files, decisions, open_threads, tags)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        entry.id,
+        entry.ts,
+        entry.project,
+        projectPath,
+        entry.branch,
+        entry.agent.name,
+        entry.agent.model ?? null,
+        entry.agent.provider ?? null,
+        entry.kind,
+        entry.title,
+        entry.summary,
+        JSON.stringify(entry.files),
+        JSON.stringify(entry.decisions),
+        JSON.stringify(entry.open_threads),
+        JSON.stringify(entry.tags),
+      );
+    if (this.hasFts) {
+      this.db
+        .prepare(`DELETE FROM entries_fts WHERE id = ? AND project_path = ?`)
+        .run(entry.id, projectPath);
+      this.db
+        .prepare(`INSERT INTO entries_fts (id, project_path, body) VALUES (?, ?, ?)`)
+        .run(entry.id, projectPath, ftsBody(entry));
+    }
+  }
+
+  upsert(entry: Entry, projectPath: string): void {
+    this.withTx(() => this.upsertRow(entry, projectPath));
+    registerRoot(projectPath, this.rootsPath);
+  }
+
+  /**
+   * Drop and re-add all of one project's entries from its JSONL file — in a
+   * single transaction, so concurrent readers never observe a half-indexed
+   * project.
+   */
   indexProject(projectRoot: string): { indexed: number; skipped: number } {
     const { entries, skipped } = readEntries(projectRoot);
-    this.db.exec('BEGIN');
-    try {
+    this.withTx(() => {
       if (this.hasFts) {
-        this.db
-          .prepare(
-            `DELETE FROM entries_fts WHERE id IN (SELECT id FROM entries WHERE project_path = ?)`,
-          )
-          .run(projectRoot);
+        this.db.prepare(`DELETE FROM entries_fts WHERE project_path = ?`).run(projectRoot);
       }
       this.db.prepare(`DELETE FROM entries WHERE project_path = ?`).run(projectRoot);
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
-    }
-    for (const entry of entries) this.upsert(entry, projectRoot);
+      for (const entry of entries) this.upsertRow(entry, projectRoot);
+    });
+    registerRoot(projectRoot, this.rootsPath);
     return { indexed: entries.length, skipped };
   }
 
   removeProject(projectRoot: string): void {
-    this.db.exec('BEGIN');
-    try {
+    this.withTx(() => {
       if (this.hasFts) {
-        this.db
-          .prepare(
-            `DELETE FROM entries_fts WHERE id IN (SELECT id FROM entries WHERE project_path = ?)`,
-          )
-          .run(projectRoot);
+        this.db.prepare(`DELETE FROM entries_fts WHERE project_path = ?`).run(projectRoot);
       }
       this.db.prepare(`DELETE FROM entries WHERE project_path = ?`).run(projectRoot);
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
-    }
+    });
   }
 
   projectPaths(): string[] {
     const rows = this.db
       .prepare(`SELECT DISTINCT project_path AS p FROM entries ORDER BY p`)
-      .all() as Array<{ p: string }>;
+      .all() as unknown as Array<{ p: string }>;
     return rows.map((r) => r.p);
   }
 
   get(id: string): ScoredEntry | null {
-    const row = this.db.prepare(`SELECT * FROM entries WHERE id = ?`).get(id) as
+    const row = this.db.prepare(`SELECT * FROM entries WHERE id = ? LIMIT 1`).get(id) as
       | EntryRow
       | undefined;
     if (!row) return null;
@@ -234,62 +273,82 @@ export class Index {
   }
 
   list(opts: { projectPath?: string; limit?: number } = {}): ScoredEntry[] {
-    const limit = opts.limit ?? 20;
+    const limit = sanitizeLimit(opts.limit, 20);
+    // GROUP BY id: a diary committed to git and indexed from two checkouts
+    // exists under both roots — show the entry once.
     const rows = (
       opts.projectPath
         ? this.db
             .prepare(`SELECT * FROM entries WHERE project_path = ? ORDER BY ts DESC LIMIT ?`)
             .all(opts.projectPath, limit)
-        : this.db.prepare(`SELECT * FROM entries ORDER BY ts DESC LIMIT ?`).all(limit)
+        : this.db
+            .prepare(`SELECT * FROM entries GROUP BY id ORDER BY ts DESC LIMIT ?`)
+            .all(limit)
     ) as unknown as EntryRow[];
     return rows.map((r) => ({ entry: rowToEntry(r), projectPath: r.project_path, score: 0 }));
   }
 
   /**
    * Ranked retrieval: FTS5 relevance (or token matching without FTS) blended
-   * with recency decay, file overlap, and branch affinity.
+   * with recency decay, file overlap, and branch affinity. Scope filters are
+   * applied in SQL, before the candidate-pool LIMIT, so a busy sibling
+   * project can never starve a scoped recall.
    */
   recall(opts: RecallOptions = {}): ScoredEntry[] {
-    const limit = opts.limit ?? DEFAULT_LIMIT;
-    const ftsQuery = opts.query ? toFtsQuery(opts.query) : null;
+    const limit = sanitizeLimit(opts.limit, DEFAULT_LIMIT);
+    const queryGiven = opts.query !== undefined && opts.query.trim() !== '';
+    const tokens = queryGiven ? tokenize(opts.query as string) : [];
+    // A real query that yields no searchable tokens must not silently degrade
+    // into a recency dump presented as "most relevant".
+    if (queryGiven && tokens.length === 0) return [];
+
+    const scope: string[] = [];
+    const scopeParams: string[] = [];
+    if (opts.projectPath) {
+      scope.push('e.project_path = ?');
+      scopeParams.push(opts.projectPath);
+    }
+    if (opts.since) {
+      scope.push('e.ts >= ?');
+      scopeParams.push(opts.since);
+    }
 
     let rows: EntryRow[];
-    if (ftsQuery && this.hasFts) {
+    if (tokens.length > 0 && this.hasFts) {
+      const where = scope.map((c) => ` AND ${c}`).join('');
       rows = this.db
         .prepare(
           `SELECT e.*, bm25(entries_fts) AS rank
            FROM entries_fts
-           JOIN entries e ON e.id = entries_fts.id
-           WHERE entries_fts MATCH ?
+           JOIN entries e
+             ON e.id = entries_fts.id AND e.project_path = entries_fts.project_path
+           WHERE entries_fts MATCH ?${where}
            ORDER BY rank
            LIMIT ?`,
         )
-        .all(ftsQuery, CANDIDATE_POOL) as unknown as EntryRow[];
+        .all(toFtsQuery(tokens), ...scopeParams, CANDIDATE_POOL) as unknown as EntryRow[];
     } else {
+      const where = scope.length > 0 ? ` WHERE ${scope.join(' AND ')}` : '';
       rows = this.db
-        .prepare(`SELECT * FROM entries ORDER BY ts DESC LIMIT ?`)
-        .all(CANDIDATE_POOL) as unknown as EntryRow[];
+        .prepare(`SELECT e.* FROM entries e${where} ORDER BY e.ts DESC LIMIT ?`)
+        .all(...scopeParams, CANDIDATE_POOL) as unknown as EntryRow[];
     }
 
     const now = Date.now();
     const wantedFiles = (opts.files ?? []).map(normalizePath);
-    const queryTokens =
-      opts.query?.toLowerCase().match(/[a-z0-9_]+/g)?.filter((t) => t.length > 1) ?? [];
 
     const scored: ScoredEntry[] = [];
     for (const row of rows) {
-      if (opts.projectPath && row.project_path !== opts.projectPath) continue;
-      if (opts.since && row.ts < opts.since) continue;
       const entry = rowToEntry(row);
 
       let score = 0;
 
       // Text relevance. bm25() is negative-is-better; flip it positive.
-      if (ftsQuery && this.hasFts) {
+      if (tokens.length > 0 && this.hasFts) {
         score += Math.max(0, -(row.rank ?? 0)) * 2;
-      } else if (queryTokens.length > 0) {
+      } else if (tokens.length > 0) {
         const body = ftsBody(entry).toLowerCase();
-        const hits = queryTokens.filter((t) => body.includes(t)).length;
+        const hits = tokens.filter((t) => body.includes(t)).length;
         if (hits === 0) continue;
         score += hits * 2;
       }
@@ -303,7 +362,7 @@ export class Index {
         const entryFiles = entry.files.map(normalizePath);
         let overlap = 0;
         for (const w of wantedFiles) {
-          if (entryFiles.some((f) => f === w || f.endsWith(w) || w.endsWith(f))) overlap++;
+          if (entryFiles.some((f) => pathsOverlap(f, w))) overlap++;
         }
         score += Math.min(overlap * 1.5, 4.5);
       }
@@ -318,7 +377,18 @@ export class Index {
     }
 
     scored.sort((a, b) => b.score - a.score || b.entry.ts.localeCompare(a.entry.ts));
-    return scored.slice(0, limit);
+
+    // Dedup by id: the same committed entry indexed from two checkouts is one
+    // piece of history, not two results.
+    const seen = new Set<string>();
+    const out: ScoredEntry[] = [];
+    for (const s of scored) {
+      if (seen.has(s.entry.id)) continue;
+      seen.add(s.entry.id);
+      out.push(s);
+      if (out.length === limit) break;
+    }
+    return out;
   }
 
   close(): void {

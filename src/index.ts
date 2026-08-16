@@ -2,6 +2,7 @@ export { EntrySchema, AgentInfoSchema, EntryKindSchema, createEntry, parseEntryL
 export type { Entry, AgentInfo, EntryKind, NewEntryInput } from './schema.js';
 export { findProjectRoot, appendEntry, readEntries, entriesPath, STORE_DIR } from './store/jsonl.js';
 export { Index, defaultIndexPath } from './store/db.js';
+export { knownRoots, registerRoot, unregisterRoot, defaultRootsPath } from './store/roots.js';
 export type { RecallOptions, ScoredEntry } from './store/db.js';
 export { AGENTS, agentMeta, normalizeAgentName, inferProvider } from './agents/registry.js';
 export { formatEntry, agentLabel, timeAgo } from './format.js';

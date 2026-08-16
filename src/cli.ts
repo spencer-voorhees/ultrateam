@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createEntry } from './schema.js';
 import { findProjectRoot, appendEntry } from './store/jsonl.js';
 import { Index } from './store/db.js';
 import { currentBranch } from './git.js';
 import { formatEntry, agentLabel, timeAgo } from './format.js';
+import { knownRoots, unregisterRoot } from './store/roots.js';
 import { init, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { VERSION } from './version.js';
@@ -19,6 +21,13 @@ function requireRoot(): string {
     process.exit(1);
   }
   return root;
+}
+
+function positiveInt(value: string): number {
+  if (!/^\d+$/.test(value.trim()) || Number.parseInt(value, 10) < 1) {
+    throw new InvalidArgumentError('must be a positive integer');
+  }
+  return Number.parseInt(value, 10);
 }
 
 function csv(value: string): string[] {
@@ -93,7 +102,7 @@ program
   .command('recall [query...]')
   .description('Search the shared diary')
   .option('-f, --files <files>', 'comma-separated files to boost matches for', csv, [])
-  .option('-n, --limit <n>', 'max results', (v) => parseInt(v, 10), 8)
+  .option('-n, --limit <n>', 'max results', positiveInt, 8)
   .option('-a, --all-projects', 'search every project on this machine')
   .action((queryWords: string[], opts) => {
     const root = findProjectRoot(process.cwd());
@@ -117,7 +126,7 @@ program
 program
   .command('list')
   .description('List recent entries')
-  .option('-n, --limit <n>', 'max results', (v) => parseInt(v, 10), 20)
+  .option('-n, --limit <n>', 'max results', positiveInt, 20)
   .option('-a, --all-projects', 'list across every project')
   .action((opts) => {
     const root = findProjectRoot(process.cwd());
@@ -143,6 +152,16 @@ program
   .description('Show one entry in full')
   .action((id: string) => {
     const index = new Index();
+    // Self-heal like recall/list: the id may exist in JSONL truth but not yet
+    // in the derived index (fresh clone, deleted index.db).
+    const root = findProjectRoot(process.cwd());
+    if (root) {
+      try {
+        index.indexProject(root);
+      } catch {
+        // fall through to whatever the index already has
+      }
+    }
     const result = index.get(id);
     index.close();
     if (!result) {
@@ -159,8 +178,21 @@ program
   .option('-a, --all', 'reindex every project the index knows about')
   .action((opts) => {
     const index = new Index();
-    const roots = opts.all ? index.projectPaths() : [requireRoot()];
+    // Union the on-disk registry with the index's own paths: the registry is
+    // what survives a deleted index.db (the index is disposable; this isn't).
+    const roots = opts.all
+      ? [...new Set([...knownRoots(), ...index.projectPaths()])]
+      : [requireRoot()];
+    if (roots.length === 0) {
+      console.log('No known projects. Run `ultrateam reindex` inside a project to register it.');
+    }
     for (const root of roots) {
+      if (!fs.existsSync(root)) {
+        index.removeProject(root);
+        unregisterRoot(root);
+        console.log(`${root}: directory gone — removed from index and registry`);
+        continue;
+      }
       const { indexed, skipped } = index.indexProject(root);
       console.log(`${root}: ${indexed} indexed${skipped > 0 ? `, ${skipped} corrupt lines skipped` : ''}`);
     }

@@ -6,13 +6,15 @@ import path from 'node:path';
 import { createEntry, type Entry } from '../src/schema.js';
 import { appendEntry } from '../src/store/jsonl.js';
 import { Index } from '../src/store/db.js';
+import { knownRoots } from '../src/store/roots.js';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-db-'));
 }
 
 function tempIndex(): Index {
-  return new Index(path.join(tempDir(), 'index.db'));
+  const dir = tempDir();
+  return new Index(path.join(dir, 'index.db'), path.join(dir, 'projects.json'));
 }
 
 function makeEntry(overrides: Partial<Parameters<typeof createEntry>[0]> = {}): Entry {
@@ -126,6 +128,97 @@ test('indexProject mirrors JSONL truth, replacing stale rows', () => {
   const listed = index.list({ projectPath: root });
   assert.equal(listed.length, 1);
   assert.equal(listed[0].entry.id, kept.id);
+  index.close();
+});
+
+test('scoped recall is not starved by a busier sibling project', () => {
+  const index = tempIndex();
+  index.upsert(
+    makeEntry({ project: 'alpha', title: 'Alpha auth work', summary: 'auth things in alpha' }),
+    '/alpha',
+  );
+  // More sibling entries than the whole candidate pool, all newer.
+  for (let i = 0; i < 210; i++) {
+    index.upsert(makeEntry({ project: 'beta', title: `Beta task ${i}`, summary: 'beta work' }), '/beta');
+  }
+  const noQuery = index.recall({ projectPath: '/alpha' });
+  assert.equal(noQuery.length, 1);
+  assert.equal(noQuery[0].projectPath, '/alpha');
+  const withQuery = index.recall({ query: 'alpha auth', projectPath: '/alpha' });
+  assert.equal(withQuery.length, 1);
+  index.close();
+});
+
+test('symbols-only query returns nothing instead of a recency dump', () => {
+  const index = tempIndex();
+  index.upsert(makeEntry({ title: 'Recent unrelated work', summary: 'stuff' }), '/proj');
+  assert.deepEqual(index.recall({ query: '???' }), []);
+  assert.deepEqual(index.recall({ query: '++ ~~' }), []);
+  index.close();
+});
+
+test('unicode queries are searchable', () => {
+  const index = tempIndex();
+  index.upsert(makeEntry({ title: '認証 flow moved to middleware', summary: 'auth in Japanese' }), '/proj');
+  index.upsert(makeEntry({ title: 'Unrelated docs tweak', summary: 'docs' }), '/proj');
+  const results = index.recall({ query: '認証' });
+  assert.ok(results.length >= 1);
+  assert.match(results[0].entry.title, /認証/);
+  index.close();
+});
+
+test('file overlap requires a path-segment boundary', () => {
+  const index = tempIndex();
+  const real = makeEntry({ title: 'Login route work', summary: 'same words here', files: ['src/routes/login.ts'] });
+  const suffix = makeEntry({ title: 'Xlogin experiment', summary: 'same words here', files: ['xlogin.ts'] });
+  index.upsert(real, '/proj');
+  index.upsert(suffix, '/proj');
+  const results = index.recall({ files: ['login.ts'], limit: 2 });
+  assert.equal(results[0].entry.id, real.id);
+  assert.ok(results[0].score > results[1].score);
+  index.close();
+});
+
+test('a shared diary indexed from two checkouts keeps both rows and dedups results', () => {
+  const index = tempIndex();
+  const rootA = tempDir();
+  const rootB = tempDir();
+  const entry = makeEntry({ title: 'Committed shared entry', summary: 'travels with the repo' });
+  appendEntry(rootA, entry);
+  appendEntry(rootB, entry);
+  index.indexProject(rootA);
+  index.indexProject(rootB);
+  // Neither checkout steals the other's row.
+  assert.equal(index.list({ projectPath: rootA }).length, 1);
+  assert.equal(index.list({ projectPath: rootB }).length, 1);
+  assert.deepEqual(index.projectPaths().sort(), [rootA, rootB].sort());
+  // But the entry is one piece of history in cross-project views.
+  assert.equal(index.recall({}).length, 1);
+  assert.equal(index.list({}).length, 1);
+  index.close();
+});
+
+test('indexed roots are registered outside the disposable index', () => {
+  const dir = tempDir();
+  const dbPath = path.join(dir, 'index.db');
+  const rootsPath = path.join(dir, 'projects.json');
+  const root = tempDir();
+  appendEntry(root, makeEntry());
+  const index = new Index(dbPath, rootsPath);
+  index.indexProject(root);
+  index.close();
+  assert.ok(knownRoots(rootsPath).includes(path.resolve(root)));
+  // Simulate a deleted index: the registry alone must still know the root.
+  fs.rmSync(dbPath, { force: true });
+  assert.ok(knownRoots(rootsPath).includes(path.resolve(root)));
+});
+
+test('invalid limit falls back to the default instead of returning nothing', () => {
+  const index = tempIndex();
+  for (let i = 0; i < 3; i++) index.upsert(makeEntry({ title: `Entry ${i}`, summary: 'x' }), '/proj');
+  assert.equal(index.recall({ limit: Number.NaN }).length, 3);
+  assert.equal(index.recall({ limit: -1 }).length, 3);
+  assert.equal(index.list({ limit: Number.NaN }).length, 3);
   index.close();
 });
 

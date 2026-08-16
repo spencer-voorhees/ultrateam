@@ -3,6 +3,7 @@
 // it and can always be rebuilt.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { type Entry, parseEntryLine } from '../schema.js';
 
@@ -15,10 +16,13 @@ export const ENTRIES_FILE = 'entries.jsonl';
  * repo root rather than wherever the agent's cwd happens to be.
  */
 export function findProjectRoot(startDir: string): string | null {
+  // ~/.ultrateam is the GLOBAL data dir (index.db, projects.json), not a
+  // project store — the home directory can never be a project root.
+  const home = path.resolve(os.homedir());
   let dir = path.resolve(startDir);
   let gitRoot: string | null = null;
   for (;;) {
-    if (fs.existsSync(path.join(dir, STORE_DIR))) return dir;
+    if (dir !== home && fs.existsSync(path.join(dir, STORE_DIR))) return dir;
     if (!gitRoot && fs.existsSync(path.join(dir, '.git'))) gitRoot = dir;
     const parent = path.dirname(dir);
     if (parent === dir) return gitRoot;

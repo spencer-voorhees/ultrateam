@@ -82,7 +82,13 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       tags: args.tags,
     });
     appendEntry(root, entry);
-    index.upsert(entry, root);
+    try {
+      index.upsert(entry, root);
+    } catch (err) {
+      // JSONL is the source of truth and the append succeeded — never fail
+      // the tool call (and provoke a duplicate retry) over the derived index.
+      console.error(`[ultrateam] index update failed for ${entry.id} (entry is safe in JSONL): ${String(err)}`);
+    }
     return entry.id;
   }
 
