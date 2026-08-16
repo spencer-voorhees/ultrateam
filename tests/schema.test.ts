@@ -53,6 +53,17 @@ test('provider inference handles gemini and codex', () => {
   assert.equal(codexEntry.agent.provider, 'openai');
 });
 
+test('createEntry canonicalizes explicit agent names', () => {
+  const entry = createEntry({
+    project: 'demo',
+    agent: { name: 'Codex', model: 'gpt-5.6-sol' },
+    title: 'Canonical identity',
+    summary: 'x',
+  });
+  assert.equal(entry.agent.name, 'codex');
+  assert.equal(entry.agent.provider, 'openai');
+});
+
 test('explicit provider is not overwritten', () => {
   const entry = createEntry({
     project: 'demo',

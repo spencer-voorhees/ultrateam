@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { type Entry, EntrySchema } from '../schema.js';
+import { canonicalAgentName } from '../agents/registry.js';
 import { readEntries } from './jsonl.js';
 import { defaultRootsPath, registerRoot } from './roots.js';
 import { isWorkspaceId, workspaceIdentity } from '../workspace.js';
@@ -165,7 +166,7 @@ function rowToEntry(row: EntryRow): Entry {
     project: row.project,
     branch: row.branch,
     agent: {
-      name: row.agent_name,
+      name: canonicalAgentName(row.agent_name),
       model: row.agent_model ?? undefined,
       provider: row.provider ?? undefined,
     },
@@ -273,7 +274,7 @@ export class Index {
         projectPath,
         workspaceId,
         entry.branch,
-        entry.agent.name,
+        canonicalAgentName(entry.agent.name),
         entry.agent.model ?? null,
         entry.agent.provider ?? null,
         entry.kind,
@@ -586,10 +587,11 @@ export class Index {
     }>;
     const byAgent = new Map<string, AgentSummary & { _providerTs: string; _providerId: string }>();
     for (const r of rows) {
-      let a = byAgent.get(r.name);
+      const name = canonicalAgentName(r.name);
+      let a = byAgent.get(name);
       if (!a) {
-        a = { name: r.name, provider: null, models: [], count: 0, lastTs: '', _providerTs: '', _providerId: '' };
-        byAgent.set(r.name, a);
+        a = { name, provider: null, models: [], count: 0, lastTs: '', _providerTs: '', _providerId: '' };
+        byAgent.set(name, a);
       }
       a.count += r.n;
       if (r.lastTs > a.lastTs || (r.lastTs === a.lastTs && r.lastId >= a._providerId)) {

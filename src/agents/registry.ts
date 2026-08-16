@@ -35,6 +35,7 @@ export function agentMeta(name: string): AgentMeta {
 export function normalizeAgentName(clientName: string | undefined): string | null {
   if (!clientName) return null;
   const n = clientName.toLowerCase();
+  if (n === 'human' || n === 'user') return 'human';
   if (n.includes('claude')) return 'claude-code';
   if (n.includes('cursor')) return 'cursor';
   if (n.includes('copilot') || n.includes('visual studio') || n.includes('vscode')) return 'copilot';
@@ -44,6 +45,12 @@ export function normalizeAgentName(clientName: string | undefined): string | nul
   if (n.includes('opencode')) return 'opencode';
   if (n.includes('zed')) return 'zed';
   return null;
+}
+
+/** Return the stable identity used for storage and filtering. */
+export function canonicalAgentName(name: string): string {
+  const trimmed = name.trim();
+  return normalizeAgentName(trimmed) ?? trimmed;
 }
 
 const MODEL_PROVIDERS: Array<[RegExp, string]> = [

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { monotonicFactory } from 'ulid';
-import { inferProvider } from './agents/registry.js';
+import { canonicalAgentName, inferProvider } from './agents/registry.js';
 
 const ulid = monotonicFactory();
 
@@ -57,7 +57,7 @@ export type NewEntryInput = Omit<z.input<typeof EntrySchema>, 'id' | 'ts'>;
 
 /** Build a complete, validated entry from caller-supplied fields, stamping id/ts/provider. */
 export function createEntry(input: NewEntryInput): Entry {
-  const agent = { ...input.agent };
+  const agent = { ...input.agent, name: canonicalAgentName(input.agent.name) };
   if (!agent.provider) {
     agent.provider = inferProvider(agent.name, agent.model);
   }

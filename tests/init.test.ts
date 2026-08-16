@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { init, doctor } from '../src/setup/init.js';
-import { normalizeAgentName } from '../src/agents/registry.js';
+import { canonicalAgentName, normalizeAgentName } from '../src/agents/registry.js';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-init-'));
@@ -57,4 +57,7 @@ test('normalizeAgentName handles gemini, antigravity, and codex', () => {
   assert.equal(normalizeAgentName('OpenAI Codex MCP Client'), 'codex');
   assert.equal(normalizeAgentName('claude-code'), 'claude-code');
   assert.equal(normalizeAgentName('cursor-agent'), 'cursor');
+  assert.equal(normalizeAgentName('User'), 'human');
+  assert.equal(canonicalAgentName(' Codex '), 'codex');
+  assert.equal(canonicalAgentName(' Custom Agent '), 'Custom Agent');
 });

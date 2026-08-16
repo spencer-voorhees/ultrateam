@@ -315,6 +315,23 @@ test('agentSummaries keeps comma-bearing model ids intact', () => {
   index.close();
 });
 
+test('legacy case variants share one canonical agent identity', () => {
+  const index = tempIndex();
+  const first = makeEntry({ agent: { name: 'codex', model: 'gpt-5.6-sol' } });
+  const second = makeEntry({ agent: { name: 'Codex', model: 'gpt-5.6-sol' } });
+  index.upsert(first, '/proj');
+  index.upsert(second, '/proj');
+
+  // Simulate a row written before agent identities were canonicalized.
+  index.db.prepare(`UPDATE entries SET agent_name = 'Codex' WHERE id = ?`).run(second.id);
+
+  const summaries = index.agentSummaries();
+  assert.equal(summaries.filter((agent) => agent.name === 'codex').length, 1);
+  assert.equal(summaries.find((agent) => agent.name === 'codex')?.count, 2);
+  assert.deepEqual(index.list().map((result) => result.entry.agent.name), ['codex', 'codex']);
+  index.close();
+});
+
 test('agentSummaries and projectSummaries use latest-wins, not MAX()', () => {
   const index = tempIndex();
   // 'openrouter' > 'anthropic' lexicographically; latest entry is anthropic.

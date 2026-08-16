@@ -15,7 +15,7 @@ export { knownRoots, registerRoot, unregisterRoot, defaultRootsPath } from './st
 export { workspaceIdentity, normalizeGitRemote, isWorkspaceId, rootsInWorkspace } from './workspace.js';
 export type { WorkspaceIdentity, WorkspaceIdentitySource } from './workspace.js';
 export type { RecallOptions, ScoredEntry } from './store/db.js';
-export { AGENTS, agentMeta, normalizeAgentName, inferProvider } from './agents/registry.js';
+export { AGENTS, agentMeta, normalizeAgentName, canonicalAgentName, inferProvider } from './agents/registry.js';
 export { formatEntry, agentLabel, timeAgo } from './format.js';
 export { CONTRACT, applyContract } from './contract.js';
 export { init, doctor } from './setup/init.js';
