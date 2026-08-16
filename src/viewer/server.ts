@@ -9,6 +9,7 @@ import { Index } from '../store/db.js';
 import { findProjectRoot } from '../store/jsonl.js';
 import { knownRoots } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
+import { workspaceIdentity } from '../workspace.js';
 
 export interface ViewerOptions {
   port?: number;
@@ -43,39 +44,55 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     const requested = url.searchParams.get('project');
     const q = url.searchParams.get('q')?.trim() ?? '';
 
-    // ?project= must name a root ultrateam already knows — never an arbitrary
-    // filesystem path (that would be a path-probing oracle, and indexProject
-    // would permanently register attacker-chosen paths).
-    const allowed = new Set<string>(knownRoots());
-    for (const p of index.projectSummaries()) allowed.add(p.path);
-    if (startRoot) allowed.add(startRoot);
-    if (requested && requested !== 'all' && !allowed.has(requested)) {
+    // ?project= names a stable logical workspace id. Continue accepting a
+    // previously-known root path as a backwards-compatible alias, but never
+    // resolve an arbitrary request path (that would become a path oracle).
+    const roots = [...new Set([...knownRoots(), ...(startRoot ? [startRoot] : [])])];
+    const rootAliases = new Map(roots.map((root) => [root, workspaceIdentity(root).id]));
+    const allowed = new Set<string>(index.projectSummaries().map((p) => p.id));
+    for (const id of rootAliases.values()) allowed.add(id);
+    const requestedScope = requested && requested !== 'all'
+      ? (rootAliases.get(requested) ?? requested)
+      : requested;
+    if (requestedScope && requestedScope !== 'all' && !allowed.has(requestedScope)) {
       json(res, 400, { error: 'unknown project' });
       return;
     }
-    const scope = requested === 'all' ? null : (requested ?? startRoot);
+    const startWorkspace = startRoot ? workspaceIdentity(startRoot).id : null;
+    const scope = requestedScope === 'all' ? null : (requestedScope ?? startWorkspace);
 
-    // Self-heal the scoped project from JSONL truth (picks up entries other
-    // agents wrote since the last request), throttled.
+    // Self-heal every checkout belonging to the scoped workspace from JSONL
+    // truth, so separate clones contribute to one logical history.
     const now = Date.now();
-    if (scope && fs.existsSync(scope) && now - (lastIndexed.get(scope) ?? 0) > REINDEX_INTERVAL_MS) {
-      lastIndexed.set(scope, now);
-      try {
-        index.indexProject(scope);
-      } catch {
-        // serve whatever the index already has
+    if (scope) {
+      for (const root of roots) {
+        if (rootAliases.get(root) !== scope || !fs.existsSync(root)) continue;
+        if (now - (lastIndexed.get(root) ?? 0) <= REINDEX_INTERVAL_MS) continue;
+        lastIndexed.set(root, now);
+        try {
+          index.indexProject(root);
+        } catch {
+          // serve whatever the index already has
+        }
       }
     }
 
     const results = q
-      ? index.recall({ query: q, projectPath: scope ?? undefined, limit: 100 })
-      : index.list({ projectPath: scope ?? undefined, limit: 200 });
+      ? index.recall({ query: q, workspaceId: scope ?? undefined, limit: 100 })
+      : index.list({ workspaceId: scope ?? undefined, limit: 200 });
 
     const projects = index.projectSummaries();
     // A freshly-inited project has a scope but zero entries — the client's
     // <select> still needs an option for it.
-    if (scope && !projects.some((p) => p.path === scope)) {
-      projects.unshift({ path: scope, name: path.basename(scope), count: 0, lastTs: '' });
+    if (scope && !projects.some((p) => p.id === scope)) {
+      projects.unshift({
+        id: scope,
+        path: startRoot ?? '',
+        name: startRoot ? path.basename(startRoot) : 'Workspace',
+        count: 0,
+        lastTs: '',
+        roots: startRoot ? [startRoot] : [],
+      });
     }
 
     const fourteenDaysAgo = new Date(now - 15 * 86_400_000).toISOString();

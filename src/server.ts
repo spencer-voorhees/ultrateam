@@ -7,17 +7,21 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createEntry, type AgentInfo } from './schema.js';
 import { findProjectRoot, appendEntry } from './store/jsonl.js';
 import { Index } from './store/db.js';
 import { currentBranch } from './git.js';
 import { normalizeAgentName } from './agents/registry.js';
-import { formatEntry } from './format.js';
+import { formatEntry, formatResume } from './format.js';
 import { VERSION } from './version.js';
+import { knownRoots } from './store/roots.js';
+import { rootsInWorkspace } from './workspace.js';
+import { createResumeState, resumableState } from './resume.js';
 
 const NUDGE =
-  '\n\n---\nultrateam protocol: checkpoint after each meaningful unit of work; call handoff with open_threads before the session ends.';
+  '\n\n---\nultrateam protocol: use resume to restore execution state; checkpoint meaningful progress; hand off structured next steps before the session ends.';
 
 const entryFields = {
   title: z.string().min(1).max(200).describe('Short, specific title for this entry'),
@@ -36,17 +40,30 @@ const entryFields = {
     .optional()
     .describe('Override the auto-detected agent name (e.g. "claude-code", "cursor")'),
   model: z.string().optional().describe('Model id doing the work, e.g. "claude-fable-5"'),
+  objective: z.string().optional().describe('The active user goal, stated independently of any agent'),
+  completed: z.array(z.string()).default([]).describe('Concrete work completed so far'),
+  next_steps: z.array(z.string()).default([]).describe('Ordered actions the next agent should take'),
+  blockers: z.array(z.string()).default([]).describe('Anything preventing progress and what would unblock it'),
+  verification: z.array(z.string()).default([]).describe('Tests or checks run, including their outcomes'),
+  commands: z.array(z.string()).default([]).describe('Useful safe commands for continuing the work'),
 };
 
 export async function startServer(cwd: string = process.cwd()): Promise<void> {
   const root = findProjectRoot(cwd) ?? cwd;
   const project = path.basename(root);
   const index = new Index();
-  try {
-    index.indexProject(root);
-  } catch (err) {
-    console.error(`[ultrateam] initial index failed: ${String(err)}`);
+
+  function indexCurrentWorkspace(): void {
+    for (const workspaceRoot of rootsInWorkspace(root, knownRoots())) {
+      if (!fs.existsSync(workspaceRoot)) continue;
+      try {
+        index.indexProject(workspaceRoot);
+      } catch (err) {
+        console.error(`[ultrateam] index failed for ${workspaceRoot}: ${String(err)}`);
+      }
+    }
   }
+  indexCurrentWorkspace();
 
   const server = new McpServer({ name: 'ultrateam', version: VERSION });
 
@@ -67,6 +84,12 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       open_threads: string[];
       agent_name?: string;
       model?: string;
+      objective?: string;
+      completed: string[];
+      next_steps: string[];
+      blockers: string[];
+      verification: string[];
+      commands: string[];
     },
   ): string {
     const entry = createEntry({
@@ -80,6 +103,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       decisions: args.decisions,
       open_threads: args.open_threads,
       tags: args.tags,
+      resume: kind === 'note' ? null : createResumeState(root, args),
     });
     appendEntry(root, entry);
     try {
@@ -115,11 +139,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       },
     },
     async ({ query, files, limit, all_projects }) => {
-      try {
-        index.indexProject(root); // pick up entries written by other agents since startup
-      } catch (err) {
-        console.error(`[ultrateam] reindex failed: ${String(err)}`);
-      }
+      indexCurrentWorkspace(); // pick up entries written in any checkout since startup
       const results = index.recall({
         query,
         files,
@@ -145,6 +165,48 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
             text: `Shared diary — ${results.length} most relevant entr${results.length === 1 ? 'y' : 'ies'} for ${project}:\n\n${body}${NUDGE}`,
           },
         ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'resume',
+    {
+      title: 'Resume the latest shared session',
+      description:
+        'Restore portable execution state from the latest checkpoint or handoff in this workspace. Returns the objective, completed work, next steps, blockers, decisions, verification, useful commands, files, and captured Git state regardless of which agent wrote it.',
+      inputSchema: {
+        handoff_id: z.string().optional().describe('Exact checkpoint or handoff ULID to restore'),
+        query: z.string().optional().describe('Optional topic to find the most relevant resumable entry'),
+        all_projects: z.boolean().default(false).describe('Search every workspace on this machine'),
+      },
+    },
+    async ({ handoff_id, query, all_projects }) => {
+      indexCurrentWorkspace();
+      const current = currentBranch(root) ?? undefined;
+      const result = handoff_id
+        ? index.resumeById(handoff_id, { projectPath: all_projects ? undefined : root })
+        : query
+        ? index.recall({
+            query,
+            limit: 50,
+            branch: current,
+            projectPath: all_projects ? undefined : root,
+          }).find((candidate) => candidate.entry.resume || candidate.entry.kind === 'handoff') ?? null
+        : index.latestResume({ projectPath: all_projects ? undefined : root, branch: current });
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: `No resumable checkpoint or handoff found for ${project}.` }],
+        };
+      }
+      const resume = resumableState(result.entry);
+      return {
+        content: [{ type: 'text' as const, text: formatResume(result.entry) + NUDGE }],
+        structuredContent: {
+          entry: result.entry,
+          resume,
+          project_path: result.projectPath,
+        },
       };
     },
   );
@@ -181,13 +243,13 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
     {
       title: 'Write a session handoff',
       description:
-        'Write the wrap-up entry before the session ends. open_threads is the briefing the next agent reads first: list every unfinished item, untested change, and known issue.',
+        'Write the structured wrap-up before the session ends so any agent can continue. Include next_steps, blockers, verification, and useful commands; open_threads remains as a backward-compatible shorthand for next_steps.',
       inputSchema: {
         ...entryFields,
         open_threads: z
           .array(z.string())
-          .min(1)
-          .describe('Unfinished items the next agent must know — at least one'),
+          .default([])
+          .describe('Backward-compatible shorthand for next_steps'),
       },
     },
     async (args) => {

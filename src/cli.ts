@@ -6,13 +6,15 @@ import { createEntry } from './schema.js';
 import { findProjectRoot, appendEntry } from './store/jsonl.js';
 import { Index } from './store/db.js';
 import { currentBranch } from './git.js';
-import { formatEntry, agentLabel, timeAgo } from './format.js';
+import { formatEntry, formatResume, agentLabel, timeAgo } from './format.js';
 import { knownRoots, unregisterRoot } from './store/roots.js';
 import { init, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { startViewer } from './viewer/server.js';
 import { execFile } from 'node:child_process';
 import { VERSION } from './version.js';
+import { rootsInWorkspace } from './workspace.js';
+import { createResumeState, resumableState } from './resume.js';
 
 const program = new Command();
 
@@ -37,6 +39,12 @@ function csv(value: string): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+function indexWorkspace(index: Index, root: string): void {
+  for (const workspaceRoot of rootsInWorkspace(root, knownRoots())) {
+    if (fs.existsSync(workspaceRoot)) index.indexProject(workspaceRoot);
+  }
 }
 
 program
@@ -100,6 +108,12 @@ program
   .option('--tags <tags>', 'comma-separated tags', csv, [])
   .option('--agent <name>', 'agent name to attribute', 'human')
   .option('--model <model>', 'model id to attribute')
+  .option('--objective <objective>', 'active user goal for portable session resume')
+  .option('--completed <items>', 'comma-separated completed work', csv, [])
+  .option('--next-steps <items>', 'comma-separated ordered next steps', csv, [])
+  .option('--blockers <items>', 'comma-separated blockers', csv, [])
+  .option('--verification <items>', 'comma-separated checks and outcomes', csv, [])
+  .option('--commands <items>', 'comma-separated useful continuation commands', csv, [])
   .action((opts) => {
     const root = requireRoot();
     const entry = createEntry({
@@ -113,12 +127,54 @@ program
       decisions: opts.decisions,
       open_threads: opts.openThreads,
       tags: opts.tags,
+      resume: opts.kind === 'note' ? null : createResumeState(root, {
+        title: opts.title,
+        summary: opts.summary,
+        open_threads: opts.openThreads,
+        objective: opts.objective,
+        completed: opts.completed,
+        next_steps: opts.nextSteps,
+        blockers: opts.blockers,
+        verification: opts.verification,
+        commands: opts.commands,
+      }),
     });
     appendEntry(root, entry);
     const index = new Index();
     index.upsert(entry, root);
     index.close();
     console.log(`Logged ${entry.id}: ${entry.title}`);
+  });
+
+program
+  .command('resume [query...]')
+  .description('Restore the latest portable session state')
+  .option('--id <ulid>', 'restore an exact checkpoint or handoff')
+  .option('-a, --all-projects', 'search every workspace on this machine')
+  .option('--json', 'print machine-readable JSON')
+  .action((queryWords: string[], opts: { id?: string; allProjects?: boolean; json?: boolean }) => {
+    const root = findProjectRoot(process.cwd());
+    const index = new Index();
+    if (root) indexWorkspace(index, root);
+    const branch = root ? (currentBranch(root) ?? undefined) : undefined;
+    const projectPath = opts.allProjects ? undefined : (root ?? undefined);
+    const result = opts.id
+      ? index.resumeById(opts.id, { projectPath })
+      : queryWords.length > 0
+      ? index.recall({ query: queryWords.join(' '), projectPath, branch, limit: 50 })
+          .find((candidate) => candidate.entry.resume || candidate.entry.kind === 'handoff') ?? null
+      : index.latestResume({ projectPath, branch });
+    index.close();
+    if (!result) {
+      console.error('No resumable checkpoint or handoff found.');
+      process.exitCode = 1;
+      return;
+    }
+    if (opts.json) {
+      console.log(JSON.stringify({ entry: result.entry, resume: resumableState(result.entry), projectPath: result.projectPath }, null, 2));
+    } else {
+      console.log(formatResume(result.entry));
+    }
   });
 
 program
@@ -130,7 +186,7 @@ program
   .action((queryWords: string[], opts) => {
     const root = findProjectRoot(process.cwd());
     const index = new Index();
-    if (root) index.indexProject(root);
+    if (root) indexWorkspace(index, root);
     const results = index.recall({
       query: queryWords.length > 0 ? queryWords.join(' ') : undefined,
       files: opts.files,
@@ -154,7 +210,7 @@ program
   .action((opts) => {
     const root = findProjectRoot(process.cwd());
     const index = new Index();
-    if (root) index.indexProject(root);
+    if (root) indexWorkspace(index, root);
     const results = index.list({
       projectPath: opts.allProjects ? undefined : (root ?? undefined),
       limit: opts.limit,
@@ -180,7 +236,7 @@ program
     const root = findProjectRoot(process.cwd());
     if (root) {
       try {
-        index.indexProject(root);
+        indexWorkspace(index, root);
       } catch {
         // fall through to whatever the index already has
       }

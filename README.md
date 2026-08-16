@@ -14,7 +14,7 @@ ultrateam treats the agents on your machine as what they actually are: **a team*
 └──────┬──────┘  └───┬────┘  └────┬────┘  └───┬─────┘  └───┬───┘
        └─────────────┴─────┬──────┴───────────┴────────────┘
                            │  identical MCP tools:
-                           │  recall · checkpoint · handoff
+                           │  resume · recall · checkpoint · handoff
                    ┌───────▼────────┐
                    │ ultrateam serve │
                    └───────┬────────┘
@@ -24,11 +24,12 @@ ultrateam treats the agents on your machine as what they actually are: **a team*
       (source of truth)            (derived, disposable)
 ```
 
-Every agent follows the same three-step protocol, installed once into `AGENTS.md` — the cross-agent instruction file they all read:
+Every agent follows the same protocol, installed once into `AGENTS.md` — the cross-agent instruction file they all read:
 
-1. **`recall`** at session start — "what has the team done on this?" Returns ranked relevant entries from *any* agent's past sessions.
-2. **`checkpoint`** after each meaningful unit of work — title, summary, files touched, decisions made.
-3. **`handoff`** before the session ends — with `open_threads`: the briefing the next agent reads first.
+1. **`resume`** when continuing work — restores a provider-neutral execution capsule: objective, progress, next steps, blockers, verification, commands, files, decisions, and Git state.
+2. **`recall`** when historical context is needed — returns ranked relevant entries from *any* agent's past sessions.
+3. **`checkpoint`** after each meaningful unit of work — updates the portable execution state.
+4. **`handoff`** before the session ends — records the final structured briefing for the next agent.
 
 There is no per-agent behavior. An agent is "on the team" the moment it's connected to the server and reading the contract.
 
@@ -47,7 +48,7 @@ Then just work. Agents checkpoint as they go. When you switch tools:
 
 > "I was working on the auth refactor"
 
-…and the new agent's `recall` pulls the trail — including the last handoff's open threads — no matter which agent wrote it.
+…and the new agent's `resume` restores the latest execution state no matter which agent wrote it. `recall` remains available for searching the longer trail.
 
 ## The diary from the human side
 
@@ -55,6 +56,8 @@ Then just work. Agents checkpoint as they go. When you switch tools:
 ultrateam view                     # the watch log in your browser
 ultrateam list                     # recent entries: who did what, when
 ultrateam recall auth middleware   # search the diary
+ultrateam resume                   # restore the latest session state
+ultrateam resume --id <id> --json # exact, machine-readable resume capsule
 ultrateam show <id>                # one entry in full
 ultrateam log -t "..." -m "..."    # write an entry yourself
 ```
@@ -81,15 +84,32 @@ Every entry is attributed: agent, model, and provider (inferred from the model i
   "files": ["src/auth/middleware.ts"],
   "decisions": ["JWT stays in httpOnly cookie; rejected localStorage (XSS)"],
   "open_threads": ["refresh-token rotation untested"],
-  "tags": ["auth"]
+  "tags": ["auth"],
+  "resume": {
+    "version": 1,
+    "objective": "Finish the authentication refactor",
+    "completed": ["Moved JWT validation into middleware"],
+    "next_steps": ["Add refresh-token rotation tests"],
+    "blockers": [],
+    "verification": ["npm test — 42 passing"],
+    "commands": ["npm test"],
+    "git": {
+      "branch": "feat/auth-refactor",
+      "head": "7d93b2...",
+      "dirty": true,
+      "changed_files": ["src/auth/middleware.ts"]
+    }
+  }
 }
 ```
 
-`open_threads` is what makes handoff work: it's the first thing the next agent sees.
+New checkpoints and handoffs always carry a `resume` capsule. Older handoffs remain resumable: ultrateam maps their title, summary, and `open_threads` into the same contract on read.
 
 ## Storage design: files are truth, SQLite is cache
 
 Entries live in **append-only JSONL** at `<project>/.ultrateam/entries.jsonl` — human-readable, greppable, diffable, and committable (`init` gitignores it by default; delete the ignore line to share the team diary through the repo). A **derived SQLite index** at `~/.ultrateam/index.db` powers cross-project queries and FTS5 ranked search; it can be deleted at any time and rebuilt with `ultrateam reindex`. Ranking blends full-text relevance, recency (one-week half-life), overlap with the files you're touching now, and same-branch affinity.
+
+Multiple checkouts of the same work are grouped into one logical workspace. ultrateam prefers an explicit `git config ultrateam.workspaceId <id>`, otherwise it derives a stable identity from the normalized Git remote; Git worktrees fall back to their shared Git directory, and unrelated local-only repositories remain separate by absolute path. This deliberately avoids merging projects merely because their folder or entry names happen to match.
 
 Why not SQLite alone? Because the lowest common denominator wins on agent-agnosticism: any agent, script, or human can read a text file with zero dependencies — and no agent's memory should be locked in an opaque store. That's the whole point.
 
@@ -101,6 +121,7 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | `ultrateam doctor` | Health check: index, contract, per-agent wiring |
 | `ultrateam view [-p port]` | Local web viewer: timeline, roster, search |
 | `ultrateam serve` | Run the MCP server (agents launch this; stdio) |
+| `ultrateam resume [query] [--id <id>] [--json]` | Restore portable execution state |
 | `ultrateam recall <query> [-f files] [-a]` | Ranked search of the diary |
 | `ultrateam list [-n] [-a]` | Recent entries with attribution |
 | `ultrateam show <id>` | One entry in full |
@@ -112,6 +133,7 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 Early. Working today: the store, the index, the MCP server, init/doctor, the CLI, and the web viewer. Requires Node ≥ 22.13 (uses the built-in `node:sqlite`; no native dependencies).
 
 - [x] **Web viewer** (`ultrateam view`) — session timeline and team roster with per-agent colors
+- [x] **Agent-agnostic resume** — structured checkpoints, exact restore, automatic Git snapshot
 - [ ] **Import** — backfill the diary from agents' native histories (Claude Code JSONL, Cursor's DB)
 - [ ] Optional semantic search behind a flag
 - [ ] Team sync — share the diary beyond one machine

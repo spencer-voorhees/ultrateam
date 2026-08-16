@@ -1,5 +1,6 @@
 import { type Entry } from './schema.js';
 import { agentMeta } from './agents/registry.js';
+import { resumableState } from './resume.js';
 
 export function timeAgo(iso: string): string {
   const ms = Date.now() - Date.parse(iso);
@@ -41,5 +42,37 @@ export function formatEntry(entry: Entry, opts: { withId?: boolean } = {}): stri
   }
   if (entry.tags.length > 0) lines.push(`\nTags: ${entry.tags.join(', ')}`);
   if (opts.withId) lines.push(`\n(id: ${entry.id})`);
+  return lines.join('\n');
+}
+
+/** Render a deterministic provider-neutral briefing suitable for direct session restoration. */
+export function formatResume(entry: Entry): string {
+  const resume = resumableState(entry);
+  const lines = [
+    `# Resume: ${entry.title}`,
+    `${agentLabel(entry)} · ${timeAgo(entry.ts)}${entry.branch ? ` · branch: ${entry.branch}` : ''}`,
+    '',
+    `Objective: ${resume.objective}`,
+  ];
+  const section = (title: string, items: string[]) => {
+    if (items.length === 0) return;
+    lines.push('', `${title}:`);
+    for (const item of items) lines.push(`- ${item}`);
+  };
+  section('Completed', resume.completed);
+  section('Next steps', resume.next_steps);
+  section('Blockers', resume.blockers);
+  section('Decisions', entry.decisions);
+  section('Files in play', entry.files);
+  section('Verification', resume.verification);
+  section('Useful commands', resume.commands);
+  if (resume.git) {
+    lines.push('', 'Git state:');
+    lines.push(`- Branch: ${resume.git.branch ?? 'detached/unknown'}`);
+    lines.push(`- HEAD: ${resume.git.head ?? 'unknown'}`);
+    lines.push(`- Working tree: ${resume.git.dirty ? 'dirty' : 'clean'}`);
+    section('Changed files', resume.git.changed_files);
+  }
+  lines.push('', `Handoff id: ${entry.id}`);
   return lines.join('\n');
 }

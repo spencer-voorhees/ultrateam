@@ -12,6 +12,25 @@ export const AgentInfoSchema = z.object({
 
 export const EntryKindSchema = z.enum(['session', 'handoff', 'note']);
 
+export const GitStateSchema = z.object({
+  branch: z.string().nullable().default(null),
+  head: z.string().nullable().default(null),
+  dirty: z.boolean().default(false),
+  changed_files: z.array(z.string()).default([]),
+});
+
+/** Portable execution state another agent can use without understanding the authoring agent. */
+export const ResumeStateSchema = z.object({
+  version: z.literal(1).default(1),
+  objective: z.string().min(1),
+  completed: z.array(z.string()).default([]),
+  next_steps: z.array(z.string()).default([]),
+  blockers: z.array(z.string()).default([]),
+  verification: z.array(z.string()).default([]),
+  commands: z.array(z.string()).default([]),
+  git: GitStateSchema.optional(),
+});
+
 export const EntrySchema = z.object({
   id: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, 'must be a ULID'),
   ts: z.string().datetime(),
@@ -25,11 +44,14 @@ export const EntrySchema = z.object({
   decisions: z.array(z.string()).default([]),
   open_threads: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
+  resume: ResumeStateSchema.nullable().default(null),
 });
 
 export type Entry = z.infer<typeof EntrySchema>;
 export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 export type EntryKind = z.infer<typeof EntryKindSchema>;
+export type GitState = z.infer<typeof GitStateSchema>;
+export type ResumeState = z.infer<typeof ResumeStateSchema>;
 
 export type NewEntryInput = Omit<z.input<typeof EntrySchema>, 'id' | 'ts'>;
 

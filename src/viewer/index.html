@@ -46,9 +46,6 @@ html.disable-transitions *::after {
   --text-tertiary: #8a8a8a;
 
   --accent-blue: #8ab4f8;
-  --accent-amber: #f0b55a;
-  --accent-amber-bg: rgba(240, 181, 90, 0.09);
-  --accent-amber-border: rgba(240, 181, 90, 0.22);
   --accent-green: #10a37f;
   --accent-purple: #a855f7;
 
@@ -88,9 +85,6 @@ html.disable-transitions *::after {
   --text-tertiary: #8a8a8a;
 
   --accent-blue: #2563eb;
-  --accent-amber: #d97706;
-  --accent-amber-bg: rgba(217, 119, 6, 0.08);
-  --accent-amber-border: rgba(217, 119, 6, 0.22);
   --accent-green: #10a37f;
   --accent-purple: #7e22ce;
 
@@ -122,9 +116,6 @@ html.disable-transitions *::after {
     --text-secondary: #5d5d5d;
     --text-tertiary: #8a8a8a;
     --accent-blue: #2563eb;
-    --accent-amber: #d97706;
-    --accent-amber-bg: rgba(217, 119, 6, 0.08);
-    --accent-amber-border: rgba(217, 119, 6, 0.22);
     --accent-green: #10a37f;
     --accent-purple: #7e22ce;
     --tag-bg: #f4f4f4;
@@ -691,12 +682,12 @@ body.sidebar-shelved .sidebar {
 }
 
 .card-header-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 0.75rem;
+  row-gap: 0.5rem;
   margin-bottom: 0.7rem;
-  flex-wrap: wrap;
 }
 
 .card-meta-left {
@@ -704,6 +695,7 @@ body.sidebar-shelved .sidebar {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .agent-badge-pill {
@@ -717,6 +709,7 @@ body.sidebar-shelved .sidebar {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
 }
 .agent-badge-pill .agent-icon-badge {
   width: 20px;
@@ -732,44 +725,51 @@ body.sidebar-shelved .sidebar {
   width: 13px;
   height: 13px;
 }
-
-.meta-prop-pill {
+.agent-identity-copy {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+}
+.agent-model-inline {
   font-family: var(--font-mono);
   font-size: 0.67rem;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 2px 7px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-model-inline::before {
+  content: '·';
+  margin-right: 0.3rem;
 }
 
 .kind-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.65rem;
   font-weight: 600;
-  text-transform: uppercase;
   border-radius: var(--radius-pill);
   padding: 2px 7px;
-}
-.kind-pill.handoff {
-  background: var(--accent-amber-bg);
-  color: var(--accent-amber);
-  border: 1px solid var(--accent-amber-border);
-}
-.kind-pill.session {
   background: var(--surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
 }
-.kind-pill.note {
-  background: var(--surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
+.kind-pill svg {
+  width: 10px;
+  height: 10px;
 }
 
 .card-time {
   font-size: 0.73rem;
   color: var(--text-tertiary);
-  margin-left: auto;
+  line-height: 20px;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .card-title {
@@ -798,55 +798,26 @@ body.sidebar-shelved .sidebar {
   color: var(--text-secondary);
   line-height: 1.62;
 }
-
-/* Notion Callout Box for Open Threads */
-.notion-callout {
-  background: var(--accent-amber-bg);
-  border: 1px solid var(--accent-amber-border);
-  border-radius: 12px;
-  padding: 0.85rem 1rem;
-  margin-top: 0.9rem;
+.card-context-row {
   display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.6rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
 }
-.notion-callout > svg {
-  color: var(--accent-amber);
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.callout-content {
-  flex: 1;
+.card-context-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   min-width: 0;
 }
-.callout-heading {
-  font-size: 0.7rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent-amber);
-  margin: 0 0 0.35rem;
-}
-.todo-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-.todo-item {
-  display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  font-size: 0.84rem;
-  color: var(--text-primary);
-}
-.todo-item svg {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  position: relative;
-  top: 1px;
+.card-context-item svg {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
 }
 
 /* Notion Toggle Disclosure Blocks */
@@ -857,6 +828,44 @@ body.sidebar-shelved .sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+.resume-capsule {
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.resume-objective {
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.resume-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--text-tertiary);
+  font-size: 0.67rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.resume-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+}
+.resume-list {
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .resume-grid { grid-template-columns: 1fr; }
 }
 
 .toggle-header-btn {
@@ -919,12 +928,8 @@ body.sidebar-shelved .sidebar {
   border-radius: 7px;
   padding: 2px 7px;
   color: var(--text-primary);
-  cursor: pointer;
+  cursor: default;
   transition: all 0.12s ease;
-}
-.file-badge-btn:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-light);
 }
 
 /* Tags Block */
@@ -979,6 +984,76 @@ body.sidebar-shelved .sidebar {
   background: var(--surface);
   color: var(--text-primary);
 }
+.action-pill-btn.active {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.action-pill-btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+
+.card-inline-panel {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.inline-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+.inline-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.panel-icon-btn {
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+.collapse-icon {
+  display: inline-flex;
+  transform: rotate(180deg);
+}
+.inline-panel-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+.card-inline-panel .code-container {
+  max-height: 420px;
+  overflow: auto;
+}
+.card-inline-panel .toggle-block {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.command-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+.command-item-label {
+  color: var(--text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 
 .id-label {
   font-family: var(--font-mono);
@@ -986,58 +1061,7 @@ body.sidebar-shelved .sidebar {
   color: var(--text-tertiary);
 }
 
-/* ============================================================
-   Modal & Toast
-   ============================================================ */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  z-index: 100;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-.modal-backdrop.open {
-  display: flex;
-}
-
-.modal-dialog {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  width: 100%;
-  max-width: 620px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-float);
-}
-.modal-header {
-  padding: 0.75rem 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-}
-.modal-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin: 0;
-}
-.modal-close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 2px;
-}
-.modal-body {
-  padding: 1rem;
-  overflow-y: auto;
-}
+/* Copyable text displayed inside expanded card panels. */
 .code-container {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -1050,14 +1074,6 @@ body.sidebar-shelved .sidebar {
   white-space: pre-wrap;
   color: var(--text-primary);
 }
-.modal-footer {
-  padding: 0.65rem 1rem;
-  border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
 .toast-box {
   position: fixed;
   bottom: 1.5rem;
@@ -1216,10 +1232,6 @@ body.sidebar-shelved .sidebar {
     padding: 1.05rem;
     border-radius: 14px;
   }
-  .card-time {
-    width: 100%;
-    margin-left: 0;
-  }
 }
 </style>
 </head>
@@ -1288,6 +1300,11 @@ body.sidebar-shelved .sidebar {
     <!-- Checkbox Icon -->
     <symbol id="icon-check-square" viewBox="0 0 24 24">
       <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
+      <path d="m8 12 2.5 2.5L16 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <!-- Handoff Arrows Icon -->
+    <symbol id="icon-handoff" viewBox="0 0 24 24">
+      <path d="M5 7h13m0 0-3-3m3 3-3 3M19 17H6m0 0 3 3m-3-3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
     <!-- Layers Icon -->
     <symbol id="icon-layers" viewBox="0 0 24 24">
@@ -1302,6 +1319,10 @@ body.sidebar-shelved .sidebar {
     <!-- Copy Icon -->
     <symbol id="icon-copy" viewBox="0 0 24 24">
       <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+    </symbol>
+    <!-- Expand / Collapse Chevron -->
+    <symbol id="icon-chevron" viewBox="0 0 24 24">
+      <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
   </defs>
 </svg>
@@ -1392,10 +1413,10 @@ body.sidebar-shelved .sidebar {
         </div>
         <div class="property-chip">
           <span class="property-label">Handoffs</span>
-          <span class="property-value" style="color:var(--accent-amber);" id="stat-handoffs">0</span>
+          <span class="property-value" id="stat-handoffs">0</span>
         </div>
         <div class="property-chip">
-          <span class="property-label">Open Threads</span>
+          <span class="property-label" title="Open items recorded by the latest handoff; not a live resolved count">Latest Handoff Items</span>
           <span class="property-value" id="stat-threads">0</span>
         </div>
         <div class="property-chip">
@@ -1413,7 +1434,7 @@ body.sidebar-shelved .sidebar {
           <span class="view-tab-count" id="badge-all">0</span>
         </button>
         <button class="view-tab-btn" data-kind="handoff">
-          <span>⇄ Handoffs</span>
+          <span>Handoffs</span>
           <span class="view-tab-count" id="badge-handoff">0</span>
         </button>
         <button class="view-tab-btn" data-kind="session">
@@ -1432,26 +1453,6 @@ body.sidebar-shelved .sidebar {
   </main>
 </div>
 
-<!-- Raw JSON Modal -->
-<div class="modal-backdrop" id="json-modal" onclick="if(event.target===this)closeJsonModal()">
-  <div class="modal-dialog">
-    <div class="modal-header">
-      <h3 class="modal-title" id="json-modal-title">Entry JSON</h3>
-      <button class="modal-close-btn" onclick="closeJsonModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <pre class="code-container" id="json-modal-content"></pre>
-    </div>
-    <div class="modal-footer">
-      <button class="action-pill-btn" id="json-copy-btn">
-        <svg viewBox="0 0 24 24" width="11" height="11"><use href="#icon-copy"/></svg>
-        <span>Copy JSON</span>
-      </button>
-      <button class="action-pill-btn" onclick="closeJsonModal()">Close</button>
-    </div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div class="toast-box" id="toast-hud"></div>
 
@@ -1462,8 +1463,8 @@ const state = {
   scope: null,
   query: '',
   kindFilter: 'all',
-  agentFilter: null,
-  openIds: new Set(),
+  agentFilters: new Set(),
+  expandedPanels: new Map(),
   selectedIndex: -1,
   data: null,
   rawPayload: '',
@@ -1477,8 +1478,14 @@ const PROVIDER_METADATA = {
   google:    { icon: '#icon-google',        color: 'var(--p-google)',    name: 'Google Gemini' },
   github:    { icon: '#icon-githubcopilot', color: 'var(--p-github)',    name: 'GitHub Copilot' },
   cursor:    { icon: '#icon-cursor',        color: 'var(--p-cursor)',    name: 'Cursor' },
-  human:     { icon: '#icon-human',         color: 'var(--p-human)',     name: 'Team member' },
+  human:     { icon: '#icon-human',         color: 'var(--p-human)',     name: 'User' },
   other:     { icon: '#icon-file',          color: 'var(--p-other)',     name: 'Agent' },
+};
+
+const ENTRY_KIND_METADATA = {
+  handoff: { icon: '#icon-handoff', label: 'Handoff' },
+  session: { icon: '#icon-check-square', label: 'Checkpoint' },
+  note: { icon: '#icon-file', label: 'Note' },
 };
 
 function getProviderMeta(agentName, provider) {
@@ -1615,7 +1622,7 @@ function render() {
 
   const currentProjectName = d.scope === 'all'
     ? 'All Workspaces'
-    : (d.projects.find((p) => p.path === d.scope)?.name || 'Workspace');
+    : (d.projects.find((p) => p.id === d.scope)?.name || 'Workspace');
   $('#page-title-text').textContent = currentProjectName;
   document.title = `ultrateam — ${currentProjectName}`;
 }
@@ -1630,12 +1637,13 @@ function renderOverview(d) {
 function renderRoster(d) {
   const list = $('#roster-list');
   const totalEntries = d.stats.entries || 0;
-  const isAllActive = state.agentFilter === null;
+  const isAllActive = state.agentFilters.size === 0;
 
   const allItem = h('button', {
     class: `agent-item-btn ${isAllActive ? 'active' : ''}`,
+    'aria-pressed': String(isAllActive),
     onclick: () => {
-      state.agentFilter = null;
+      state.agentFilters.clear();
       render();
     },
   },
@@ -1655,13 +1663,18 @@ function renderRoster(d) {
 
   const agentItems = d.agents.map((a) => {
     const meta = getProviderMeta(a.name, a.meta?.provider || a.provider);
-    const isActive = state.agentFilter === a.name;
+    const isActive = state.agentFilters.has(a.name);
     const modelsStr = a.models && a.models.length ? a.models.join(', ') : timeAgo(a.lastTs);
 
     return h('button', {
       class: `agent-item-btn ${isActive ? 'active' : ''}`,
+      'aria-pressed': String(isActive),
       onclick: () => {
-        state.agentFilter = state.agentFilter === a.name ? null : a.name;
+        if (state.agentFilters.has(a.name)) {
+          state.agentFilters.delete(a.name);
+        } else {
+          state.agentFilters.add(a.name);
+        }
         render();
       },
     },
@@ -1684,17 +1697,16 @@ function renderRoster(d) {
 function renderProjectNav(d) {
   const list = $('#project-nav-list');
   const items = [
-    { path: 'all', name: 'All', count: d.stats.entries },
+    { id: 'all', name: 'All', count: d.stats.entries },
     ...d.projects,
   ];
 
   setChildren(list, items.map((p) => {
-    const isActive = (state.scope === p.path) || (p.path === 'all' && state.scope === 'all');
+    const isActive = (state.scope === p.id) || (p.id === 'all' && state.scope === 'all');
     return h('button', {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
       onclick: () => {
-        state.scope = p.path;
-        state.agentFilter = null;
+        state.scope = p.id;
         fetchState();
       },
     },
@@ -1722,15 +1734,27 @@ function renderFeed(d) {
   else if (state.kindFilter === 'session') entries = entries.filter((e) => e.kind === 'session');
   else if (state.kindFilter === 'note') entries = entries.filter((e) => e.kind === 'note');
 
-  if (state.agentFilter) {
-    entries = entries.filter((e) => e.agent?.name === state.agentFilter);
+  if (state.agentFilters.size > 0) {
+    entries = entries.filter((e) => state.agentFilters.has(e.agent?.name));
   }
 
   const stream = $('#feed-stream');
   if (entries.length === 0) {
+    const reasons = [];
+    if (state.query) reasons.push(`search “${state.query}”`);
+    if (state.agentFilters.size > 0) reasons.push(`${state.agentFilters.size} selected agent${state.agentFilters.size === 1 ? '' : 's'}`);
+    if (state.kindFilter !== 'all') reasons.push(ENTRY_KIND_METADATA[state.kindFilter]?.label.toLowerCase() || state.kindFilter);
+    const message = reasons.length > 0
+      ? `No entries match ${reasons.join(' and ')} in this workspace.`
+      : 'No diary entries in this workspace yet.';
     setChildren(stream,
       h('div', { class: 'empty-block' },
-        h('p', { style: 'margin:0;font-size:0.85rem;' }, 'No matching diary entries found.')
+        h('p', { style: 'margin:0;font-size:0.85rem;' }, message),
+        reasons.length > 0 ? h('button', {
+          class: 'action-pill-btn',
+          style: 'margin-top:0.65rem;',
+          onclick: resetFilters,
+        }, 'Clear filters') : null
       )
     );
     return;
@@ -1741,8 +1765,8 @@ function renderFeed(d) {
 
 function renderCard(entry, index, d) {
   const providerMeta = getProviderMeta(entry.agent?.name || entry.meta?.display, entry.agent?.provider || entry.meta?.provider);
-  const isOpen = state.openIds.has(entry.id);
-  const isHandoff = entry.kind === 'handoff';
+  const kindMeta = ENTRY_KIND_METADATA[entry.kind] || { icon: '#icon-file', label: entry.kind };
+  const activePanel = state.expandedPanels.get(entry.id) || null;
   const isSelected = state.selectedIndex === index;
 
   const card = h('article', {
@@ -1756,15 +1780,15 @@ function renderCard(entry, index, d) {
           h('div', { class: 'agent-icon-badge', style: `--p-color:${providerMeta.color};` },
             svgIcon(providerMeta.icon, 13, 13)
           ),
-          h('span', {}, getAgentDisplayName(entry.agent?.name, entry.meta?.display, providerMeta))
+          h('span', { class: 'agent-identity-copy' },
+            h('span', {}, getAgentDisplayName(entry.agent?.name, entry.meta?.display, providerMeta)),
+            entry.agent?.model ? h('span', { class: 'agent-model-inline', title: entry.agent.model }, entry.agent.model) : null
+          )
         ),
-        entry.agent?.model ? h('span', { class: 'meta-prop-pill' }, entry.agent.model) : null,
-        entry.branch ? h('span', { class: 'meta-prop-pill' },
-          svgIcon('#icon-branch', 9, 9),
-          h('span', { style: 'margin-left:2px;' }, entry.branch)
-        ) : null,
-        d.scope === 'all' && entry.project ? h('span', { class: 'meta-prop-pill' }, entry.project) : null,
-        h('span', { class: `kind-pill ${entry.kind}` }, entry.kind === 'handoff' ? '⇄ handoff' : entry.kind)
+        h('span', { class: `kind-pill ${entry.kind}` },
+          svgIcon(kindMeta.icon, 10, 10),
+          h('span', {}, kindMeta.label)
+        )
       ),
       h('span', { class: 'card-time', title: fullDateTime(entry.ts) }, timeAgo(entry.ts))
     ),
@@ -1773,111 +1797,188 @@ function renderCard(entry, index, d) {
     h('h3', { class: 'card-title' },
       h('button', {
         class: 'card-title-btn',
-        onclick: () => toggleCard(entry.id),
+        onclick: () => toggleCardPanel(entry.id, 'details'),
       }, entry.title)
     ),
     h('p', { class: 'card-summary' }, entry.summary),
-
-    // Notion-Style Callout for Open Threads (Handoff Next Agent Briefing)
-    entry.open_threads && entry.open_threads.length > 0 ? h('div', { class: 'notion-callout' },
-      svgIcon('#icon-alert', 14, 14),
-      h('div', { class: 'callout-content' },
-        h('div', { class: 'callout-heading' }, 'Open Threads — Next Agent Briefing'),
-        h('ul', { class: 'todo-list' }, entry.open_threads.map((t) =>
-          h('li', { class: 'todo-item' },
-            svgIcon('#icon-check-square', 12, 12),
-            h('span', {}, t)
-          )
-        ))
-      )
-    ) : null,
-
-    // Expanded Toggle Details (Decisions, Files, Tags)
-    isOpen ? h('div', { class: 'toggle-block' },
-      entry.decisions && entry.decisions.length > 0 ? h('div', {},
-        h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, 'Decisions & Rationale'),
-        h('ul', { class: 'bullet-list' }, entry.decisions.map((dec) =>
-          h('li', { class: 'bullet-item' },
-            h('span', { class: 'bullet-dot' }, '•'),
-            h('span', {}, dec)
-          )
-        ))
+    (entry.branch || (d.scope === 'all' && entry.project)) ? h('div', { class: 'card-context-row' },
+      entry.branch ? h('span', { class: 'card-context-item' },
+        svgIcon('#icon-branch', 10, 10),
+        h('span', {}, entry.branch)
       ) : null,
-
-      entry.files && entry.files.length > 0 ? h('div', {},
-        h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, `Files Touched (${entry.files.length})`),
-        h('div', { class: 'files-grid' }, entry.files.map((file) =>
-          h('button', {
-            class: 'file-badge-btn',
-            title: 'Click to copy file path',
-            onclick: () => copyText(file, `Copied ${file}`),
-          },
-            svgIcon('#icon-file', 10, 10),
-            h('span', {}, file)
-          )
-        ))
-      ) : null,
-
-      entry.tags && entry.tags.length > 0 ? h('div', { class: 'tags-row' },
-        entry.tags.map((t) => h('span', { class: 'notion-tag' }, `#${t}`))
+      d.scope === 'all' && entry.project ? h('span', { class: 'card-context-item' },
+        svgIcon('#icon-folder', 10, 10),
+        h('span', {}, entry.project)
       ) : null
     ) : null,
 
-    // Action Footer
+    // Stable action selector: every option opens an inline text panel.
     h('div', { class: 'card-action-bar' },
       h('div', { class: 'action-cluster' },
         h('button', {
-          class: 'action-pill-btn',
-          onclick: () => toggleCard(entry.id),
-        }, isOpen ? 'Collapse' : 'Details'),
+          class: `action-pill-btn ${activePanel === 'details' ? 'active' : ''}`,
+          'aria-expanded': String(activePanel === 'details'),
+          onclick: () => toggleCardPanel(entry.id, 'details'),
+        }, 'Details'),
         h('button', {
-          class: 'action-pill-btn',
-          title: `Copy CLI command: ultrateam show ${entry.id}`,
-          onclick: () => copyText(`ultrateam show ${entry.id}`, `Copied command: ultrateam show ${entry.id}`),
-        },
-          svgIcon('#icon-file', 10, 10),
-          h('span', {}, 'CLI show')
-        ),
+          class: `action-pill-btn ${activePanel === 'commands' ? 'active' : ''}`,
+          'aria-expanded': String(activePanel === 'commands'),
+          onclick: () => toggleCardPanel(entry.id, 'commands'),
+        }, 'Commands'),
         h('button', {
-          class: 'action-pill-btn',
-          title: 'View raw JSON representation',
-          onclick: () => openJsonModal(entry),
+          class: `action-pill-btn ${activePanel === 'json' ? 'active' : ''}`,
+          'aria-expanded': String(activePanel === 'json'),
+          onclick: () => toggleCardPanel(entry.id, 'json'),
         }, 'JSON')
       ),
       h('span', { class: 'id-label' }, entry.id.slice(0, 10) + '…')
-    )
+    ),
+    activePanel ? renderCardPanel(entry, activePanel) : null
   );
 
   return card;
 }
 
-function toggleCard(id) {
-  if (state.openIds.has(id)) state.openIds.delete(id);
-  else state.openIds.add(id);
+function renderResumeCapsule(resume) {
+  const list = (label, items) => items && items.length ? h('div', {},
+    h('span', { class: 'resume-label' }, label),
+    h('ul', { class: 'resume-list' }, items.map((item) => h('li', {}, item)))
+  ) : null;
+  const gitFacts = resume.git ? [
+    `Branch: ${resume.git.branch || 'detached/unknown'}`,
+    `HEAD: ${resume.git.head ? resume.git.head.slice(0, 12) : 'unknown'}`,
+    `Working tree: ${resume.git.dirty ? 'dirty' : 'clean'}`,
+    ...(resume.git.changed_files || []).map((file) => `Changed: ${file}`),
+  ] : [];
+  return h('section', { class: 'resume-capsule' },
+    h('div', { class: 'resume-objective' },
+      h('span', { class: 'resume-label' }, 'Resume objective'),
+      resume.objective
+    ),
+    h('div', { class: 'resume-grid' },
+      list('Completed', resume.completed),
+      list('Next steps', resume.next_steps),
+      list('Blockers', resume.blockers),
+      list('Verification', resume.verification),
+      list('Useful commands', resume.commands),
+      list('Captured Git state', gitFacts)
+    )
+  );
+}
+
+function renderCardPanel(entry, panel) {
+  const detailsText = formatEntryText(entry);
+  const jsonText = JSON.stringify(entry, null, 2);
+  const isCommands = panel === 'commands';
+  const config = panel === 'json'
+    ? { title: 'Entry JSON', text: jsonText, copyLabel: 'Copy JSON' }
+    : panel === 'details'
+      ? { title: 'Entry details', text: detailsText, copyLabel: 'Copy details' }
+      : { title: 'Commands', text: '', copyLabel: '' };
+
+  return h('section', { class: 'card-inline-panel', 'data-panel': panel },
+    h('div', { class: 'inline-panel-header' },
+      h('h4', { class: 'inline-panel-title' }, config.title),
+      h('div', { class: 'inline-panel-actions' },
+        !isCommands ? h('button', {
+          class: 'action-pill-btn panel-icon-btn',
+          title: config.copyLabel,
+          'aria-label': config.copyLabel,
+          onclick: () => copyText(config.text, `${config.copyLabel.replace('Copy ', '')} copied`),
+        }, svgIcon('#icon-copy', 12, 12)) : null,
+        h('button', {
+          class: 'action-pill-btn panel-icon-btn',
+          title: `Collapse ${config.title.toLowerCase()}`,
+          'aria-label': `Collapse ${config.title.toLowerCase()}`,
+          onclick: () => toggleCardPanel(entry.id, panel),
+        }, h('span', { class: 'collapse-icon' }, svgIcon('#icon-chevron', 14, 14)))
+      )
+    ),
+    panel === 'details'
+      ? renderEntryDetails(entry)
+      : isCommands
+        ? renderCommands(entry)
+        : h('pre', { class: 'code-container' }, config.text)
+  );
+}
+
+function renderCommands(entry) {
+  const commands = [
+    { label: 'Show entry', value: `ultrateam show ${entry.id}` },
+    ...(entry.resume || entry.kind === 'handoff'
+      ? [{ label: 'Resume work', value: `ultrateam resume --id ${entry.id}` }]
+      : []),
+  ];
+  return h('div', { class: 'command-list' }, commands.map((command) =>
+    h('div', { class: 'command-item' },
+      h('div', { class: 'command-item-header' },
+        h('span', { class: 'command-item-label' }, command.label),
+        h('button', {
+          class: 'action-pill-btn panel-icon-btn',
+          title: `Copy ${command.label.toLowerCase()} command`,
+          'aria-label': `Copy ${command.label.toLowerCase()} command`,
+          onclick: () => copyText(command.value, 'Command copied'),
+        }, svgIcon('#icon-copy', 12, 12))
+      ),
+      h('pre', { class: 'code-container' }, command.value)
+    )
+  ));
+}
+
+function renderEntryDetails(entry) {
+  return h('div', { class: 'toggle-block' },
+    entry.resume ? renderResumeCapsule(entry.resume) : null,
+    entry.open_threads && entry.open_threads.length > 0 ? h('div', {},
+      h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, 'Open Items Recorded'),
+      h('ul', { class: 'bullet-list' }, entry.open_threads.map((item) =>
+        h('li', { class: 'bullet-item' }, h('span', { class: 'bullet-dot' }, '•'), h('span', {}, item))
+      ))
+    ) : null,
+    entry.decisions && entry.decisions.length > 0 ? h('div', {},
+      h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, 'Decisions & Rationale'),
+      h('ul', { class: 'bullet-list' }, entry.decisions.map((dec) =>
+        h('li', { class: 'bullet-item' }, h('span', { class: 'bullet-dot' }, '•'), h('span', {}, dec))
+      ))
+    ) : null,
+    entry.files && entry.files.length > 0 ? h('div', {},
+      h('div', { style: 'font-weight:600;font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem;' }, `Files Touched (${entry.files.length})`),
+      h('div', { class: 'files-grid' }, entry.files.map((file) =>
+        h('span', { class: 'file-badge-btn' }, svgIcon('#icon-file', 10, 10), h('span', {}, file))
+      ))
+    ) : null,
+    entry.tags && entry.tags.length > 0 ? h('div', { class: 'tags-row' },
+      entry.tags.map((tag) => h('span', { class: 'notion-tag' }, `#${tag}`))
+    ) : null
+  );
+}
+
+function formatEntryText(entry) {
+  const lines = [entry.title, '', entry.summary];
+  const add = (label, items) => {
+    if (!items || items.length === 0) return;
+    lines.push('', `${label}:`, ...items.map((item) => `- ${item}`));
+  };
+  add('Decisions', entry.decisions);
+  add('Files', entry.files);
+  add('Open threads recorded at handoff', entry.open_threads);
+  add('Tags', entry.tags);
+  return lines.join('\n');
+}
+
+function toggleCardPanel(id, panel = 'details') {
+  if (state.expandedPanels.get(id) === panel) state.expandedPanels.delete(id);
+  else state.expandedPanels.set(id, panel);
   render();
 }
 
 function resetFilters() {
   state.query = '';
-  state.agentFilter = null;
+  state.agentFilters.clear();
   state.kindFilter = 'all';
   $('#search-input').value = '';
   $('#search-clear').style.display = 'none';
   $$('.view-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.kind === 'all'));
   fetchState();
-}
-
-function openJsonModal(entry) {
-  const modal = $('#json-modal');
-  $('#json-modal-title').textContent = `JSON · ${entry.id}`;
-  const jsonStr = JSON.stringify(entry, null, 2);
-  $('#json-modal-content').textContent = jsonStr;
-  $('#json-copy-btn').onclick = () => copyText(jsonStr, 'JSON copied to clipboard');
-  modal.classList.add('open');
-}
-
-function closeJsonModal() {
-  $('#json-modal').classList.remove('open');
 }
 
 let toastTimer = null;
@@ -2082,7 +2183,11 @@ window.addEventListener('keydown', (ev) => {
       sidebarToggle.focus();
       return;
     }
-    closeJsonModal();
+    const selectedCard = $$('.notion-card')[state.selectedIndex];
+    if (selectedCard?.dataset.id && state.expandedPanels.has(selectedCard.dataset.id)) {
+      state.expandedPanels.delete(selectedCard.dataset.id);
+      render();
+    }
     return;
   }
 
@@ -2106,7 +2211,7 @@ window.addEventListener('keydown', (ev) => {
     const activeCard = posts[state.selectedIndex];
     if (activeCard) {
       const id = activeCard.dataset.id;
-      toggleCard(id);
+      toggleCardPanel(id, 'details');
     }
   }
 });

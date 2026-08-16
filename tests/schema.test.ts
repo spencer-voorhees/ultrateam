@@ -100,4 +100,26 @@ test('schema defaults arrays and branch', () => {
   assert.equal(parsed.branch, null);
   assert.equal(parsed.kind, 'session');
   assert.deepEqual(parsed.tags, []);
+  assert.equal(parsed.resume, null);
+});
+
+test('resume capsule round-trips through the entry schema', () => {
+  const entry = createEntry({
+    project: 'demo',
+    agent: { name: 'codex' },
+    kind: 'handoff',
+    title: 'Resume this work',
+    summary: 'Implemented the first slice.',
+    resume: {
+      objective: 'Ship agent-agnostic session resume',
+      completed: ['Added a portable schema'],
+      next_steps: ['Expose the resume tool'],
+      blockers: [],
+      verification: ['Schema tests pass'],
+      commands: ['npm test'],
+      git: { branch: 'feature/resume', head: 'abc123', dirty: true, changed_files: ['src/schema.ts'] },
+    },
+  });
+  assert.deepEqual(parseEntryLine(JSON.stringify(entry)), entry);
+  assert.equal(entry.resume?.objective, 'Ship agent-agnostic session resume');
 });

@@ -10,10 +10,11 @@ import path from 'node:path';
 import { type Entry, EntrySchema } from '../schema.js';
 import { readEntries } from './jsonl.js';
 import { defaultRootsPath, registerRoot } from './roots.js';
+import { isWorkspaceId, workspaceIdentity } from '../workspace.js';
 
 // Bump when the table shape changes: a mismatched index is dropped and
 // rebuilt rather than migrated — it holds nothing original.
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 3;
 
 export function defaultIndexPath(): string {
   return path.join(os.homedir(), '.ultrateam', 'index.db');
@@ -23,8 +24,10 @@ export interface RecallOptions {
   query?: string;
   files?: string[];
   branch?: string;
-  /** Restrict to one project root; omit for all projects. */
+  /** Restrict to the logical workspace containing this root; omit for all workspaces. */
   projectPath?: string;
+  /** Restrict directly to a logical workspace id (used by the viewer). */
+  workspaceId?: string;
   /** ISO timestamp lower bound. */
   since?: string;
   limit?: number;
@@ -37,10 +40,14 @@ export interface ScoredEntry {
 }
 
 export interface ProjectSummary {
+  /** Stable logical workspace id. */
+  id: string;
+  /** Representative checkout root retained for API compatibility and diagnostics. */
   path: string;
   name: string;
   count: number;
   lastTs: string;
+  roots: string[];
 }
 
 export interface AgentSummary {
@@ -56,6 +63,7 @@ interface EntryRow {
   ts: string;
   project: string;
   project_path: string;
+  workspace_id: string;
   branch: string | null;
   agent_name: string;
   agent_model: string | null;
@@ -67,6 +75,7 @@ interface EntryRow {
   decisions: string;
   open_threads: string;
   tags: string;
+  resume: string | null;
   rank?: number;
 }
 
@@ -85,6 +94,7 @@ function ftsBody(e: Entry): string {
     e.decisions.join('\n'),
     e.open_threads.join('\n'),
     e.tags.join(' '),
+    e.resume ? JSON.stringify(e.resume) : '',
     e.agent.name,
     e.agent.model ?? '',
     e.branch ?? '',
@@ -97,11 +107,49 @@ function tokenize(query: string): string[] {
 }
 
 function toFtsQuery(tokens: string[]): string {
-  return tokens.map((t) => `"${t}"`).join(' OR ');
+  // Prefixes make search useful while the user is still typing ("auth" finds
+  // "authentication") without relaxing FTS into an expensive substring scan.
+  return tokens.map((t) => `"${t}"*`).join(' OR ');
+}
+
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length > b.length) return editDistanceAtMostOne(b, a);
+
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length === b.length) {
+      i++;
+      j++;
+    } else {
+      j++;
+    }
+  }
+  return edits + Number(i < a.length || j < b.length) <= 1;
+}
+
+function wordMatchesQuery(word: string, queryToken: string): boolean {
+  if (word.startsWith(queryToken)) return true;
+  return queryToken.length >= 4 && editDistanceAtMostOne(word, queryToken);
 }
 
 function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').toLowerCase();
+}
+
+function resolveWorkspaceScope(projectPath?: string, workspaceId?: string): string | undefined {
+  if (workspaceId) return workspaceId;
+  if (!projectPath) return undefined;
+  return isWorkspaceId(projectPath) ? projectPath : workspaceIdentity(projectPath).id;
 }
 
 /** Overlap requires a path-segment boundary so "a.ts" never matches "schema.ts". */
@@ -127,6 +175,7 @@ function rowToEntry(row: EntryRow): Entry {
     decisions: JSON.parse(row.decisions),
     open_threads: JSON.parse(row.open_threads),
     tags: JSON.parse(row.tags),
+    resume: row.resume ? JSON.parse(row.resume) : null,
   });
 }
 
@@ -158,6 +207,7 @@ export class Index {
         ts TEXT NOT NULL,
         project TEXT NOT NULL,
         project_path TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         branch TEXT,
         agent_name TEXT NOT NULL,
         agent_model TEXT,
@@ -169,10 +219,12 @@ export class Index {
         decisions TEXT NOT NULL,
         open_threads TEXT NOT NULL,
         tags TEXT NOT NULL,
+        resume TEXT,
         PRIMARY KEY (id, project_path)
       );
       CREATE INDEX IF NOT EXISTS idx_entries_ts ON entries(ts);
       CREATE INDEX IF NOT EXISTS idx_entries_project ON entries(project_path);
+      CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
     `);
     let fts = true;
     try {
@@ -205,19 +257,20 @@ export class Index {
     }
   }
 
-  private upsertRow(entry: Entry, projectPath: string): void {
+  private upsertRow(entry: Entry, projectPath: string, workspaceId: string): void {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO entries
-         (id, ts, project, project_path, branch, agent_name, agent_model, provider,
-          kind, title, summary, files, decisions, open_threads, tags)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, ts, project, project_path, workspace_id, branch, agent_name, agent_model, provider,
+          kind, title, summary, files, decisions, open_threads, tags, resume)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         entry.id,
         entry.ts,
         entry.project,
         projectPath,
+        workspaceId,
         entry.branch,
         entry.agent.name,
         entry.agent.model ?? null,
@@ -229,6 +282,7 @@ export class Index {
         JSON.stringify(entry.decisions),
         JSON.stringify(entry.open_threads),
         JSON.stringify(entry.tags),
+        entry.resume ? JSON.stringify(entry.resume) : null,
       );
     if (this.hasFts) {
       this.db
@@ -241,7 +295,8 @@ export class Index {
   }
 
   upsert(entry: Entry, projectPath: string): void {
-    this.withTx(() => this.upsertRow(entry, projectPath));
+    const workspaceId = workspaceIdentity(projectPath).id;
+    this.withTx(() => this.upsertRow(entry, projectPath, workspaceId));
     registerRoot(projectPath, this.rootsPath);
   }
 
@@ -252,12 +307,13 @@ export class Index {
    */
   indexProject(projectRoot: string): { indexed: number; skipped: number } {
     const { entries, skipped } = readEntries(projectRoot);
+    const workspaceId = workspaceIdentity(projectRoot).id;
     this.withTx(() => {
       if (this.hasFts) {
         this.db.prepare(`DELETE FROM entries_fts WHERE project_path = ?`).run(projectRoot);
       }
       this.db.prepare(`DELETE FROM entries WHERE project_path = ?`).run(projectRoot);
-      for (const entry of entries) this.upsertRow(entry, projectRoot);
+      for (const entry of entries) this.upsertRow(entry, projectRoot, workspaceId);
     });
     registerRoot(projectRoot, this.rootsPath);
     return { indexed: entries.length, skipped };
@@ -287,20 +343,58 @@ export class Index {
     return { entry: rowToEntry(row), projectPath: row.project_path, score: 0 };
   }
 
-  list(opts: { projectPath?: string; limit?: number } = {}): ScoredEntry[] {
+  list(opts: { projectPath?: string; workspaceId?: string; limit?: number } = {}): ScoredEntry[] {
     const limit = sanitizeLimit(opts.limit, 20);
+    const workspaceId = resolveWorkspaceScope(opts.projectPath, opts.workspaceId);
     // GROUP BY id: a diary committed to git and indexed from two checkouts
     // exists under both roots — show the entry once.
     const rows = (
-      opts.projectPath
+      workspaceId
         ? this.db
-            .prepare(`SELECT * FROM entries WHERE project_path = ? ORDER BY ts DESC LIMIT ?`)
-            .all(opts.projectPath, limit)
+            .prepare(`SELECT * FROM entries WHERE workspace_id = ? GROUP BY id ORDER BY ts DESC LIMIT ?`)
+            .all(workspaceId, limit)
         : this.db
             .prepare(`SELECT * FROM entries GROUP BY id ORDER BY ts DESC LIMIT ?`)
             .all(limit)
     ) as unknown as EntryRow[];
     return rows.map((r) => ({ entry: rowToEntry(r), projectPath: r.project_path, score: 0 }));
+  }
+
+  /** Latest portable execution state, preferring the current branch when timestamps tie in relevance. */
+  latestResume(opts: { projectPath?: string; workspaceId?: string; branch?: string } = {}): ScoredEntry | null {
+    const workspaceId = resolveWorkspaceScope(opts.projectPath, opts.workspaceId);
+    const scope = workspaceId ? 'AND workspace_id = ?' : '';
+    const params = workspaceId ? [workspaceId] : [];
+    const branchOrder = opts.branch ? 'CASE WHEN branch = ? THEN 1 ELSE 0 END DESC,' : '';
+    const branchParams = opts.branch ? [opts.branch] : [];
+    // Prefer entries carrying a native resume capsule. A legacy handoff remains
+    // resumable so upgrading never strands existing history.
+    const row = this.db
+      .prepare(
+        `SELECT * FROM entries
+         WHERE (resume IS NOT NULL OR kind = 'handoff') ${scope}
+         ORDER BY ${branchOrder} (resume IS NOT NULL) DESC, ts DESC, id DESC
+         LIMIT 1`,
+      )
+      .get(...params, ...branchParams) as EntryRow | undefined;
+    if (!row) return null;
+    return { entry: rowToEntry(row), projectPath: row.project_path, score: 0 };
+  }
+
+  resumeById(id: string, opts: { projectPath?: string; workspaceId?: string } = {}): ScoredEntry | null {
+    const workspaceId = resolveWorkspaceScope(opts.projectPath, opts.workspaceId);
+    const row = (
+      workspaceId
+        ? this.db.prepare(
+            `SELECT * FROM entries
+             WHERE id = ? AND workspace_id = ? AND (resume IS NOT NULL OR kind = 'handoff') LIMIT 1`,
+          ).get(id, workspaceId)
+        : this.db.prepare(
+            `SELECT * FROM entries WHERE id = ? AND (resume IS NOT NULL OR kind = 'handoff') LIMIT 1`,
+          ).get(id)
+    ) as EntryRow | undefined;
+    if (!row) return null;
+    return { entry: rowToEntry(row), projectPath: row.project_path, score: 0 };
   }
 
   /**
@@ -319,9 +413,10 @@ export class Index {
 
     const scope: string[] = [];
     const scopeParams: string[] = [];
-    if (opts.projectPath) {
-      scope.push('e.project_path = ?');
-      scopeParams.push(opts.projectPath);
+    const workspaceId = resolveWorkspaceScope(opts.projectPath, opts.workspaceId);
+    if (workspaceId) {
+      scope.push('e.workspace_id = ?');
+      scopeParams.push(workspaceId);
     }
     if (opts.since) {
       scope.push('e.ts >= ?');
@@ -342,6 +437,15 @@ export class Index {
            LIMIT ?`,
         )
         .all(toFtsQuery(tokens), ...scopeParams, CANDIDATE_POOL) as unknown as EntryRow[];
+      // FTS deliberately stays fast and strict. If it finds nothing, make one
+      // bounded pass over recent scoped entries so a single typo does not turn
+      // an otherwise useful search into an empty feed.
+      if (rows.length === 0) {
+        const fallbackWhere = scope.length > 0 ? ` WHERE ${scope.join(' AND ')}` : '';
+        rows = this.db
+          .prepare(`SELECT e.* FROM entries e${fallbackWhere} ORDER BY e.ts DESC LIMIT ?`)
+          .all(...scopeParams, CANDIDATE_POOL) as unknown as EntryRow[];
+      }
     } else {
       const where = scope.length > 0 ? ` WHERE ${scope.join(' AND ')}` : '';
       rows = this.db
@@ -358,14 +462,25 @@ export class Index {
 
       let score = 0;
 
-      // Text relevance. bm25() is negative-is-better; flip it positive.
-      if (tokens.length > 0 && this.hasFts) {
+      // Text relevance blends FTS ranking with human-meaningful signals. This
+      // makes title/phrase and full-query matches beat incidental body hits.
+      if (tokens.length > 0) {
+        const query = (opts.query as string).trim().toLowerCase();
+        const bodyWords = tokenize(ftsBody(entry));
+        const title = entry.title.toLowerCase();
+        const summary = entry.summary.toLowerCase();
+        const titleWords = tokenize(entry.title);
+        const matched = tokens.filter((token) => bodyWords.some((word) => wordMatchesQuery(word, token)));
+        if (matched.length === 0) continue;
+
+        score += matched.length * 2;
+        if (matched.length === tokens.length) score += 3;
+        if (title.includes(query)) score += 8;
+        else if (summary.includes(query)) score += 4;
+        if (tokens.every((token) => titleWords.some((word) => wordMatchesQuery(word, token)))) score += 4;
+        // bm25() is negative-is-better; flip it positive when this row came
+        // from the FTS candidate query. Fuzzy fallback rows have no rank.
         score += Math.max(0, -(row.rank ?? 0)) * 2;
-      } else if (tokens.length > 0) {
-        const body = ftsBody(entry).toLowerCase();
-        const hits = tokens.filter((t) => body.includes(t)).length;
-        if (hits === 0) continue;
-        score += hits * 2;
       }
 
       // Recency: half-life of one week.
@@ -411,25 +526,41 @@ export class Index {
     // a project ever had, not its current one).
     const rows = this.db
       .prepare(
-        `SELECT project_path AS path, project AS name, ts, id FROM entries ORDER BY ts ASC, id ASC`,
+        `SELECT workspace_id AS workspaceId, project_path AS root, project AS name, ts, id
+         FROM entries ORDER BY ts ASC, id ASC`,
       )
-      .all() as unknown as Array<{ path: string; name: string; ts: string; id: string }>;
-    const byPath = new Map<string, ProjectSummary & { _lastId: string }>();
+      .all() as unknown as Array<{ workspaceId: string; root: string; name: string; ts: string; id: string }>;
+    const byWorkspace = new Map<string, ProjectSummary & { _lastId: string; _entryIds: Set<string>; _roots: Set<string> }>();
     for (const r of rows) {
-      const cur = byPath.get(r.path);
+      const cur = byWorkspace.get(r.workspaceId);
       if (!cur) {
-        byPath.set(r.path, { path: r.path, name: r.name, count: 1, lastTs: r.ts, _lastId: r.id });
+        byWorkspace.set(r.workspaceId, {
+          id: r.workspaceId,
+          path: r.root,
+          name: r.name,
+          count: 1,
+          lastTs: r.ts,
+          roots: [r.root],
+          _lastId: r.id,
+          _entryIds: new Set([r.id]),
+          _roots: new Set([r.root]),
+        });
       } else {
-        cur.count++;
+        if (!cur._entryIds.has(r.id)) {
+          cur._entryIds.add(r.id);
+          cur.count++;
+        }
+        cur._roots.add(r.root);
         if (r.ts > cur.lastTs || (r.ts === cur.lastTs && r.id >= cur._lastId)) {
           cur.lastTs = r.ts;
           cur._lastId = r.id;
           cur.name = r.name;
+          cur.path = r.root;
         }
       }
     }
-    return [...byPath.values()]
-      .map(({ _lastId, ...p }) => p)
+    return [...byWorkspace.values()]
+      .map(({ _lastId, _entryIds, _roots, ...p }) => ({ ...p, roots: [..._roots].sort() }))
       .sort((a, b) => b.lastTs.localeCompare(a.lastTs));
   }
 
@@ -437,12 +568,13 @@ export class Index {
     // Group per (agent, model, provider) in SQL, fold in JS: model ids are
     // arbitrary text (commas included), so GROUP_CONCAT round-trips corrupt
     // them; and provider must be latest-wins, not MAX().
+    const workspaceId = resolveWorkspaceScope(projectPath);
     const sql = `SELECT agent_name AS name, agent_model AS model, provider,
-                        COUNT(*) AS n, MAX(ts) AS lastTs, MAX(id) AS lastId
-                 FROM entries ${projectPath ? 'WHERE project_path = ?' : ''}
+                        COUNT(DISTINCT id) AS n, MAX(ts) AS lastTs, MAX(id) AS lastId
+                 FROM entries ${workspaceId ? 'WHERE workspace_id = ?' : ''}
                  GROUP BY agent_name, agent_model, provider`;
     const rows = (
-      projectPath ? this.db.prepare(sql).all(projectPath) : this.db.prepare(sql).all()
+      workspaceId ? this.db.prepare(sql).all(workspaceId) : this.db.prepare(sql).all()
     ) as unknown as Array<{
       name: string;
       model: string | null;
@@ -476,8 +608,9 @@ export class Index {
 
   /** Scope-wide truthful counts, independent of any feed cap or ordering. */
   stats(projectPath?: string): { entries: number; handoffs: number; openThreads: number } {
-    const where = projectPath ? 'WHERE project_path = ?' : '';
-    const params = projectPath ? [projectPath] : [];
+    const workspaceId = resolveWorkspaceScope(projectPath);
+    const where = workspaceId ? 'WHERE workspace_id = ?' : '';
+    const params = workspaceId ? [workspaceId] : [];
     const counts = this.db
       .prepare(`SELECT COUNT(DISTINCT id) AS n, COUNT(DISTINCT CASE WHEN kind = 'handoff' THEN id END) AS h FROM entries ${where}`)
       .get(...params) as { n: number; h: number };
@@ -500,11 +633,13 @@ export class Index {
 
   /** Timestamps of scope entries since `sinceIso` (for client-side day bucketing). */
   recentTs(projectPath: string | undefined, sinceIso: string, limit = 5000): string[] {
-    const sql = `SELECT ts FROM entries ${projectPath ? 'WHERE project_path = ? AND' : 'WHERE'} ts >= ?
+    const workspaceId = resolveWorkspaceScope(projectPath);
+    const sql = `SELECT MAX(ts) AS ts FROM entries ${workspaceId ? 'WHERE workspace_id = ? AND' : 'WHERE'} ts >= ?
+                 GROUP BY id
                  ORDER BY ts DESC LIMIT ?`;
     const rows = (
-      projectPath
-        ? this.db.prepare(sql).all(projectPath, sinceIso, limit)
+      workspaceId
+        ? this.db.prepare(sql).all(workspaceId, sinceIso, limit)
         : this.db.prepare(sql).all(sinceIso, limit)
     ) as unknown as Array<{ ts: string }>;
     return rows.map((r) => r.ts);

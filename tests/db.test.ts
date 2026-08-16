@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,6 +17,13 @@ function tempDir(): string {
 function tempIndex(): Index {
   const dir = tempDir();
   return new Index(path.join(dir, 'index.db'), path.join(dir, 'projects.json'));
+}
+
+function initGitRoot(remote?: string): string {
+  const root = tempDir();
+  execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+  if (remote) execFileSync('git', ['remote', 'add', 'origin', remote], { cwd: root, stdio: 'ignore' });
+  return root;
 }
 
 function makeEntry(overrides: Partial<Parameters<typeof createEntry>[0]> = {}): Entry {
@@ -55,6 +64,36 @@ test('recall ranks query matches above unrelated entries', () => {
   const results = index.recall({ query: 'auth refactor middleware' });
   assert.ok(results.length >= 1);
   assert.match(results[0].entry.title, /auth/i);
+  index.close();
+});
+
+test('recall matches prefixes while the user is typing', () => {
+  const index = tempIndex();
+  const matching = makeEntry({ title: 'Authentication middleware', summary: 'Secured the route.' });
+  index.upsert(matching, '/proj');
+  index.upsert(makeEntry({ title: 'Documentation cleanup', summary: 'Updated examples.' }), '/proj');
+  const results = index.recall({ query: 'authent' });
+  assert.equal(results[0]?.entry.id, matching.id);
+  index.close();
+});
+
+test('recall tolerates one typo when strict search has no matches', () => {
+  const index = tempIndex();
+  const matching = makeEntry({ title: 'Authentication middleware', summary: 'Secured the route.' });
+  index.upsert(matching, '/proj');
+  const results = index.recall({ query: 'authentcation' });
+  assert.equal(results[0]?.entry.id, matching.id);
+  index.close();
+});
+
+test('recall ranks a title phrase above an incidental body match', () => {
+  const index = tempIndex();
+  const titleMatch = makeEntry({ title: 'Workspace identity', summary: 'Unified repository clones.' });
+  const bodyMatch = makeEntry({ title: 'General cleanup', summary: 'Touched workspace identity in passing.' });
+  index.upsert(bodyMatch, '/proj');
+  index.upsert(titleMatch, '/proj');
+  const results = index.recall({ query: 'workspace identity', limit: 2 });
+  assert.equal(results[0]?.entry.id, titleMatch.id);
   index.close();
 });
 
@@ -198,6 +237,26 @@ test('a shared diary indexed from two checkouts keeps both rows and dedups resul
   index.close();
 });
 
+test('separate clones of one remote unify into a single scoped workspace', () => {
+  const index = tempIndex();
+  const rootA = initGitRoot('git@github.com:acme/widgets.git');
+  const rootB = initGitRoot('https://github.com/acme/widgets.git');
+  appendEntry(rootA, makeEntry({ title: 'Work from clone A', summary: 'alpha' }));
+  appendEntry(rootB, makeEntry({ title: 'Work from clone B', summary: 'beta' }));
+  index.indexProject(rootA);
+  index.indexProject(rootB);
+
+  const projects = index.projectSummaries();
+  assert.equal(projects.length, 1);
+  assert.equal(projects[0].count, 2);
+  assert.deepEqual(projects[0].roots, [rootA, rootB].sort());
+  assert.equal(index.list({ projectPath: rootA }).length, 2);
+  assert.equal(index.list({ projectPath: rootB }).length, 2);
+  assert.equal(index.stats(rootA).entries, 2);
+  assert.equal(index.agentSummaries(rootA)[0].count, 2);
+  index.close();
+});
+
 test('indexed roots are registered outside the disposable index', () => {
   const dir = tempDir();
   const dbPath = path.join(dir, 'index.db');
@@ -211,6 +270,21 @@ test('indexed roots are registered outside the disposable index', () => {
   // Simulate a deleted index: the registry alone must still know the root.
   fs.rmSync(dbPath, { force: true });
   assert.ok(knownRoots(rootsPath).includes(path.resolve(root)));
+});
+
+test('an older disposable index is rebuilt with workspace identity', () => {
+  const dir = tempDir();
+  const dbPath = path.join(dir, 'index.db');
+  const old = new DatabaseSync(dbPath);
+  old.exec('CREATE TABLE entries (id TEXT); PRAGMA user_version = 1;');
+  old.close();
+
+  const index = new Index(dbPath, path.join(dir, 'projects.json'));
+  const columns = index.db.prepare('PRAGMA table_info(entries)').all() as unknown as Array<{ name: string }>;
+  const version = index.db.prepare('PRAGMA user_version').get() as { user_version: number };
+  assert.ok(columns.some((column) => column.name === 'workspace_id'));
+  assert.equal(version.user_version, 3);
+  index.close();
 });
 
 test('invalid limit falls back to the default instead of returning nothing', () => {
@@ -287,5 +361,27 @@ test('get returns a stored entry with its project path', () => {
   assert.equal(found.projectPath, '/proj');
   assert.deepEqual(found.entry, entry);
   assert.equal(index.get('01ARZ3NDEKTSV4RRFFQ69G5FAV'), null);
+  index.close();
+});
+
+test('latestResume prefers a capsule on the current branch and supports exact ids', () => {
+  const index = tempIndex();
+  const main = makeEntry({
+    branch: 'main',
+    kind: 'handoff',
+    title: 'Main handoff',
+    resume: { objective: 'Continue main' },
+  });
+  const feature = makeEntry({
+    branch: 'feature/resume',
+    kind: 'session',
+    title: 'Feature checkpoint',
+    resume: { objective: 'Continue feature' },
+  });
+  index.upsert(main, '/proj');
+  index.upsert(feature, '/proj');
+  assert.equal(index.latestResume({ projectPath: '/proj', branch: 'main' })?.entry.id, main.id);
+  assert.equal(index.resumeById(feature.id, { projectPath: '/proj' })?.entry.id, feature.id);
+  assert.equal(index.resumeById(feature.id, { projectPath: '/elsewhere' }), null);
   index.close();
 });
