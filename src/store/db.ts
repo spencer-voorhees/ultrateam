@@ -36,6 +36,21 @@ export interface ScoredEntry {
   score: number;
 }
 
+export interface ProjectSummary {
+  path: string;
+  name: string;
+  count: number;
+  lastTs: string;
+}
+
+export interface AgentSummary {
+  name: string;
+  provider: string | null;
+  models: string[];
+  count: number;
+  lastTs: string;
+}
+
 interface EntryRow {
   id: string;
   ts: string;
@@ -389,6 +404,103 @@ export class Index {
       if (out.length === limit) break;
     }
     return out;
+  }
+
+  projectSummaries(): ProjectSummary[] {
+    // Latest-wins name (MAX(project) would pick the alphabetically-last name
+    // a project ever had, not its current one).
+    const rows = this.db
+      .prepare(
+        `SELECT project_path AS path, project AS name, ts, 1 AS one FROM entries`,
+      )
+      .all() as unknown as Array<{ path: string; name: string; ts: string }>;
+    const byPath = new Map<string, ProjectSummary>();
+    for (const r of rows) {
+      const cur = byPath.get(r.path);
+      if (!cur) {
+        byPath.set(r.path, { path: r.path, name: r.name, count: 1, lastTs: r.ts });
+      } else {
+        cur.count++;
+        if (r.ts > cur.lastTs) {
+          cur.lastTs = r.ts;
+          cur.name = r.name;
+        }
+      }
+    }
+    return [...byPath.values()].sort((a, b) => b.lastTs.localeCompare(a.lastTs));
+  }
+
+  agentSummaries(projectPath?: string): AgentSummary[] {
+    // Group per (agent, model, provider) in SQL, fold in JS: model ids are
+    // arbitrary text (commas included), so GROUP_CONCAT round-trips corrupt
+    // them; and provider must be latest-wins, not MAX().
+    const sql = `SELECT agent_name AS name, agent_model AS model, provider,
+                        COUNT(*) AS n, MAX(ts) AS lastTs
+                 FROM entries ${projectPath ? 'WHERE project_path = ?' : ''}
+                 GROUP BY agent_name, agent_model, provider`;
+    const rows = (
+      projectPath ? this.db.prepare(sql).all(projectPath) : this.db.prepare(sql).all()
+    ) as unknown as Array<{
+      name: string;
+      model: string | null;
+      provider: string | null;
+      n: number;
+      lastTs: string;
+    }>;
+    const byAgent = new Map<string, AgentSummary & { _providerTs: string }>();
+    for (const r of rows) {
+      let a = byAgent.get(r.name);
+      if (!a) {
+        a = { name: r.name, provider: null, models: [], count: 0, lastTs: '', _providerTs: '' };
+        byAgent.set(r.name, a);
+      }
+      a.count += r.n;
+      if (r.lastTs > a.lastTs) a.lastTs = r.lastTs;
+      if (r.lastTs > a._providerTs) {
+        a._providerTs = r.lastTs;
+        a.provider = r.provider;
+      }
+      if (r.model && !a.models.includes(r.model)) a.models.push(r.model);
+    }
+    return [...byAgent.values()]
+      .map(({ _providerTs, ...a }) => a)
+      .sort((a, b) => b.count - a.count);
+  }
+
+  /** Scope-wide truthful counts, independent of any feed cap or ordering. */
+  stats(projectPath?: string): { entries: number; handoffs: number; openThreads: number } {
+    const where = projectPath ? 'WHERE project_path = ?' : '';
+    const params = projectPath ? [projectPath] : [];
+    const counts = this.db
+      .prepare(`SELECT COUNT(DISTINCT id) AS n, COUNT(DISTINCT CASE WHEN kind = 'handoff' THEN id END) AS h FROM entries ${where}`)
+      .get(...params) as { n: number; h: number };
+    const latest = this.db
+      .prepare(
+        `SELECT open_threads FROM entries ${where ? where + ' AND' : 'WHERE'} kind = 'handoff'
+         ORDER BY ts DESC LIMIT 1`,
+      )
+      .get(...params) as { open_threads: string } | undefined;
+    let openThreads = 0;
+    if (latest) {
+      try {
+        openThreads = (JSON.parse(latest.open_threads) as string[]).length;
+      } catch {
+        // corrupt index row; reindex will heal it
+      }
+    }
+    return { entries: counts.n, handoffs: counts.h, openThreads };
+  }
+
+  /** Timestamps of scope entries since `sinceIso` (for client-side day bucketing). */
+  recentTs(projectPath: string | undefined, sinceIso: string, limit = 5000): string[] {
+    const sql = `SELECT ts FROM entries ${projectPath ? 'WHERE project_path = ? AND' : 'WHERE'} ts >= ?
+                 ORDER BY ts DESC LIMIT ?`;
+    const rows = (
+      projectPath
+        ? this.db.prepare(sql).all(projectPath, sinceIso, limit)
+        : this.db.prepare(sql).all(sinceIso, limit)
+    ) as unknown as Array<{ ts: string }>;
+    return rows.map((r) => r.ts);
   }
 
   close(): void {

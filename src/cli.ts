@@ -10,6 +10,8 @@ import { formatEntry, agentLabel, timeAgo } from './format.js';
 import { knownRoots, unregisterRoot } from './store/roots.js';
 import { init, doctor } from './setup/init.js';
 import { startServer } from './server.js';
+import { startViewer } from './viewer/server.js';
+import { execFile } from 'node:child_process';
 import { VERSION } from './version.js';
 
 const program = new Command();
@@ -63,6 +65,27 @@ program
   .description('Start the MCP server (stdio) — this is what agent configs launch')
   .action(async () => {
     await startServer();
+  });
+
+program
+  .command('view')
+  .description('Open the team log in your browser (local web viewer)')
+  .option('-p, --port <n>', 'port to listen on', positiveInt, 4272)
+  .option('--no-open', 'do not open the browser automatically')
+  .action(async (opts: { port: number; open: boolean }) => {
+    const { url } = await startViewer({ port: opts.port });
+    console.log(`ultrateam viewer at ${url} (Ctrl+C to stop)`);
+    if (opts.open) {
+      const [cmd, args] =
+        process.platform === 'win32'
+          ? ['cmd', ['/c', 'start', '', url]]
+          : process.platform === 'darwin'
+            ? ['open', [url]]
+            : ['xdg-open', [url]];
+      execFile(cmd as string, args as string[], () => {
+        // the URL is printed either way; a failed auto-open is not an error
+      });
+    }
   });
 
 program

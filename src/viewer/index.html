@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ultrateam — watch log</title>
+<style>
+/* ============================================================
+   ultrateam viewer — "night watch" design tokens
+   Dark-first. Provider colors are the validated 3-slot
+   categorical palette (orange/aqua/blue) + deliberate neutrals;
+   identity is never color-alone (icon + name always present),
+   which is also why providers beyond the three slots share the
+   neutral — adding hues would break the validated set.
+   ============================================================ */
+:root {
+  color-scheme: dark;
+  --bg: #0e141b;
+  --surface: #161e27;
+  --surface-2: #1c2632;
+  --ink: #e8ecf1;
+  --ink-2: #9aa7b6;
+  --ink-3: #8fa0b0;   /* 6.3:1 on --surface — AA at small sizes */
+  --line: #26303c;
+  --line-soft: #1d2631;
+  --c-anthropic: #d95926;
+  --c-openai: #199e70;
+  --c-github: #3987e5;
+  --c-cursor: #97a3b2;
+  --c-other: #6b7684;
+  --seq: #3987e5;
+  --focus: #86b6ef;
+  --mono: "Cascadia Code", ui-monospace, "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #edf0f3;
+  --ink: #16202b;
+  --ink-2: #4e5b69;
+  --ink-3: #57636f;   /* 6.1:1 on white — AA at small sizes */
+  --line: #dde3e9;
+  --line-soft: #e9edf1;
+  --c-anthropic: #eb6834;
+  --c-openai: #1baf7a;
+  --c-github: #2a78d6;
+  --c-cursor: #5b6675;
+  --c-other: #8b95a1;
+  --seq: #2a78d6;
+  --focus: #1c5cab;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #edf0f3;
+    --ink: #16202b;
+    --ink-2: #4e5b69;
+    --ink-3: #57636f;
+    --line: #dde3e9;
+    --line-soft: #e9edf1;
+    --c-anthropic: #eb6834;
+    --c-openai: #1baf7a;
+    --c-github: #2a78d6;
+    --c-cursor: #5b6675;
+    --c-other: #8b95a1;
+    --seq: #2a78d6;
+    --focus: #1c5cab;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+/* provider color hook: elements read var(--pc) */
+.p-anthropic { --pc: var(--c-anthropic); }
+.p-openai    { --pc: var(--c-openai); }
+.p-github    { --pc: var(--c-github); }
+.p-cursor    { --pc: var(--c-cursor); }
+.p-other     { --pc: var(--c-other); }
+
+/* ---------- header ---------- */
+.top {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+@media (min-width: 881px) {
+  /* the sidebar's sticky offset assumes a one-row header */
+  .top { flex-wrap: nowrap; }
+}
+.wordmark {
+  font-family: var(--mono);
+  font-size: 17px; font-weight: 700; letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.wordmark .cursor-blink {
+  display: inline-block; width: 0.55em; height: 1.05em;
+  background: var(--ink); vertical-align: text-bottom; margin-left: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .wordmark .cursor-blink { animation: blink 1.2s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+}
+.tagline {
+  font-size: 12.5px; color: var(--ink-3);
+  border-left: 1px solid var(--line); padding-left: 16px;
+}
+.top .controls { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+select, .search, button.ghost {
+  font-family: var(--mono); font-size: 12.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+}
+select { max-width: 220px; }
+.search { width: 220px; }
+.search::placeholder { color: var(--ink-3); }
+button.ghost { cursor: pointer; }
+button.ghost:hover { border-color: var(--ink-3); }
+
+/* ---------- layout ---------- */
+.layout {
+  display: grid; grid-template-columns: 264px minmax(0, 1fr);
+  gap: 28px; max-width: 1080px; margin: 0 auto; padding: 24px;
+}
+.rail { display: flex; flex-direction: column; gap: 26px; align-self: start; position: sticky; top: 76px; }
+
+.eyebrow {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
+  display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
+}
+.eyebrow::after { content: ""; flex: 1; border-top: 1px solid var(--line-soft); }
+
+/* stats */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 9px; padding: 10px 12px;
+}
+.tile .v { font-size: 24px; font-weight: 650; line-height: 1.15; }
+.tile .l {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3); margin-top: 2px;
+}
+
+/* activity strip (single-hue sequential; per-day data is in each cell's
+   aria-label, so it is reachable by keyboard and screen reader, with the
+   tooltip shown on hover AND focus) */
+.activity .strip {
+  display: flex; align-items: flex-end; gap: 2px; height: 46px;
+  border-bottom: 1px solid var(--line); padding-bottom: 1px;
+  margin: 0; padding-left: 0; list-style: none;
+}
+.activity .cell { flex: 1; display: flex; align-items: flex-end; height: 100%; cursor: default; }
+.activity .bar { width: 100%; min-height: 2px; background: var(--seq); border-radius: 2px 2px 0 0; }
+.activity .cell.zero .bar { background: var(--line); }
+.activity .axis {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; color: var(--ink-3); margin-top: 4px;
+}
+
+/* roster */
+.roster { display: flex; flex-direction: column; gap: 4px; }
+.member {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 8px; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 7px 9px; color: var(--ink); font-family: var(--sans); font-size: 13px;
+  cursor: pointer;
+}
+.member:hover { background: var(--surface); border-color: var(--line); }
+.member[aria-pressed="true"] { background: var(--surface); border-color: var(--pc); }
+.member .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); }
+.member .who { min-width: 0; }
+.member .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.member .sub {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.member .n { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+
+/* ---------- feed ---------- */
+.feed { min-width: 0; }
+.feed-note { font-size: 12.5px; color: var(--ink-2); margin: 0 0 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.day { margin: 26px 0 12px; }
+.day:first-child { margin-top: 0; }
+
+/* the watch line: rail segment + node per entry, colored by the agent on duty */
+.entry {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr);
+  gap: 0 14px; position: relative;
+}
+.entry .node { position: relative; }
+.entry .node::before {
+  content: ""; position: absolute; left: 11px; top: 0; bottom: 0;
+  width: 2px; background: var(--pc); opacity: 0.55;
+}
+.entry .node::after {
+  content: ""; position: absolute; left: 6px; top: 20px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--pc); border: 2px solid var(--bg);
+}
+.entry.handoff .node::after { border-radius: 3px; transform: rotate(45deg); }
+.entry:last-child .node::before { bottom: auto; height: 26px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 13px 16px; margin: 0 0 10px;
+  cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease;
+  overflow-wrap: anywhere; /* agent text can contain long unbroken paths */
+  min-width: 0;
+}
+.entry.handoff .card { border-left: 3px solid var(--pc); }
+.card:hover { border-color: var(--pc); transform: translateY(-1px); }
+.meta {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+}
+.meta .t { color: var(--ink-3); }
+.meta .who { color: var(--ink); font-weight: 600; }
+.badge {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 99px;
+  background: color-mix(in srgb, var(--pc) 16%, transparent);
+  color: var(--ink);
+}
+.card h3 { margin: 6px 0 4px; font-size: 15.5px; font-weight: 640; line-height: 1.3; }
+/* the disclosure control IS the title — real button, so semantics survive */
+.card h3 .tbtn {
+  all: unset; cursor: pointer; font: inherit; color: inherit;
+  overflow-wrap: anywhere;
+}
+.card h3 .tbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.card .sum { margin: 0; color: var(--ink-2); }
+.card:not(.open) .sum {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.detail { display: none; margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.card.open .detail { display: block; }
+.detail h4 {
+  margin: 10px 0 4px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+}
+.detail ul { margin: 0; padding: 0; list-style: none; }
+.detail li { padding-left: 16px; position: relative; margin: 3px 0; color: var(--ink-2); }
+.detail li::before { content: "–"; position: absolute; left: 2px; color: var(--ink-3); }
+.detail .threads li::before { content: "○"; color: var(--pc); font-size: 11px; top: 1px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);
+  background: var(--surface-2); border-radius: 5px; padding: 2px 7px;
+  overflow-wrap: anywhere;
+}
+.idline { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 10px; overflow-wrap: anywhere; }
+
+/* empty / error */
+.blank {
+  border: 1px dashed var(--line); border-radius: 12px;
+  padding: 42px 24px; text-align: center; color: var(--ink-2);
+}
+.blank code {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--surface-2); padding: 2px 6px; border-radius: 5px;
+}
+
+/* tooltip (activity strip) */
+.tip {
+  position: fixed; z-index: 30; pointer-events: none;
+  font-family: var(--mono); font-size: 11px;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px;
+  display: none;
+}
+
+/* entrance: one orchestrated rise on the FIRST paint only — re-renders from
+   polling or interaction must not replay it */
+@media (prefers-reduced-motion: no-preference) {
+  .feed.anim .entry { opacity: 0; transform: translateY(7px); animation: rise 0.4s ease forwards; animation-delay: calc(var(--i, 0) * 35ms); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+}
+
+@media (max-width: 880px) {
+  .layout { grid-template-columns: 1fr; gap: 18px; }
+  .rail { position: static; }
+  .tagline { display: none; }
+  .search { width: 150px; }
+  select { max-width: 150px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wordmark">ultrateam<span class="cursor-blink" aria-hidden="true"></span></div>
+  <div class="tagline">The shared watch log of this machine's coding agents</div>
+  <div class="controls">
+    <select id="project" aria-label="Project"></select>
+    <input class="search" id="q" type="search" placeholder="Search the log…" aria-label="Search the log">
+    <button class="ghost" id="theme" aria-label="Switch theme">theme</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="rail">
+    <section class="statsbox">
+      <h2 class="eyebrow">This log</h2>
+      <div class="stats" id="stats"></div>
+    </section>
+    <section class="activity">
+      <h2 class="eyebrow">Last 14 days</h2>
+      <ul class="strip" id="strip" aria-label="Entries per day, last 14 days"></ul>
+      <div class="axis"><span id="ax-from"></span><span>today</span></div>
+    </section>
+    <section>
+      <h2 class="eyebrow">Roster</h2>
+      <div class="roster" id="roster"></div>
+    </section>
+  </aside>
+  <section class="feed anim" id="feed"></section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+'use strict';
+/* All rendering goes through h(): strings become text nodes, never markup —
+   entry content is arbitrary text written by agents and must not execute. */
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid === null || kid === undefined) continue;
+    el.append(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+  }
+  return el;
+}
+const $ = (s) => document.querySelector(s);
+/* replaceChildren stringifies arrays — always go through this. */
+function setChildren(el, ...kids) {
+  el.replaceChildren(...kids.flat(Infinity).filter((k) => k !== null && k !== undefined));
+}
+
+/* Only the three validated categorical slots carry hue; every other provider
+   deliberately shares the neutral — identity is icon + name, never color. */
+const PROVIDER_CLASS = {
+  anthropic: 'p-anthropic',
+  openai: 'p-openai',
+  github: 'p-github',
+  cursor: 'p-cursor',
+};
+const pClass = (provider) => PROVIDER_CLASS[provider] || 'p-other';
+
+const state = {
+  scope: null,        // project path or 'all'
+  q: '',
+  agentFilter: null,  // roster filter, client-side
+  openIds: new Set(),
+  data: null,
+  raw: '',            // last payload, for change detection
+  seq: 0,             // in-flight request sequencing
+  hasPainted: false,  // entrance animation runs once
+};
+
+/* ---------- formatting ---------- */
+function timeAgo(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (!(ms >= 0)) return '';
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const hr = Math.floor(m / 60);
+  if (hr < 24) return hr + 'h ago';
+  const d = Math.floor(hr / 24);
+  if (d < 30) return d + 'd ago';
+  return Math.floor(d / 30) + 'mo ago';
+}
+const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function dayKey(iso) { const d = new Date(iso); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+function dayLabel(iso) {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  if (sameDay(d, today)) return 'WATCH OF TODAY';
+  const y = new Date(today); // calendar arithmetic — a flat -24h is wrong across DST
+  y.setDate(y.getDate() - 1);
+  if (sameDay(d, y)) return 'WATCH OF YESTERDAY';
+  return 'WATCH OF ' + DAYS[d.getDay()] + ' · ' + MONTHS[d.getMonth()] + ' ' + d.getDate();
+}
+function clock(iso) {
+  const d = new Date(iso);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/* ---------- data ---------- */
+async function refresh() {
+  const my = ++state.seq;
+  const p = new URLSearchParams();
+  if (state.scope) p.set('project', state.scope);
+  if (state.q) p.set('q', state.q);
+  try {
+    const res = await fetch('/api/state?' + p.toString());
+    if (my !== state.seq) return; // a newer request superseded this one
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const raw = await res.text();
+    if (my !== state.seq) return;
+    if (raw === state.raw) return; // nothing changed — leave the DOM alone
+    state.raw = raw;
+    state.data = JSON.parse(raw);
+    if (!state.scope) state.scope = state.data.scope;
+    render();
+  } catch (err) {
+    if (my !== state.seq) return;
+    setChildren($('#feed'),
+      h('div', { class: 'blank' },
+        h('p', {}, 'The viewer lost contact with the ultrateam server.'),
+        h('p', {}, 'Restart it with ', h('code', {}, 'ultrateam view'), ' and reload this page.')),
+    );
+  }
+}
+
+/* ---------- render ---------- */
+function render() {
+  const d = state.data;
+  renderProjects(d);
+  const entries = state.agentFilter
+    ? d.entries.filter((e) => e.agent.name === state.agentFilter)
+    : d.entries;
+  renderStats(d);
+  renderActivity(d.activityTs);
+  renderRoster(d);
+  renderFeed(entries, d);
+  if (!state.hasPainted) {
+    state.hasPainted = true;
+    // drop the entrance-animation class once the first rise has finished so
+    // later re-renders never replay it
+    setTimeout(() => $('#feed').classList.remove('anim'), 1000);
+  }
+  const scopeName = d.scope === 'all' ? 'all projects'
+    : (d.projects.find((p) => p.path === d.scope) || {}).name || 'project';
+  document.title = 'ultrateam — ' + scopeName;
+}
+
+function renderProjects(d) {
+  const sel = $('#project');
+  if (document.activeElement === sel) return; // never rebuild an open dropdown
+  setChildren(sel,
+    h('option', { value: 'all' }, 'all projects'),
+    d.projects.map((p) => h('option', { value: p.path }, p.name + ' (' + p.count + ')')),
+  );
+  sel.value = d.scope;
+}
+
+/* Stat tiles come from d.stats: scope-wide SQL truth, immune to the feed's
+   200-entry cap, search ordering, and the roster filter. */
+function renderStats(d) {
+  setChildren($('#stats'),
+    tile(d.stats.entries, d.stats.entries === 1 ? 'entry' : 'entries'),
+    tile(d.agents.length, 'on roster'),
+    tile(d.stats.handoffs, 'handoffs'),
+    tile(d.stats.openThreads, 'open threads'),
+  );
+}
+const tile = (v, l) => h('div', { class: 'tile' }, h('div', { class: 'v' }, String(v)), h('div', { class: 'l' }, l));
+
+function renderActivity(activityTs) {
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push({ key: dayKey(d.toISOString()), label: MONTHS[d.getMonth()] + ' ' + d.getDate(), n: 0 });
+  }
+  const byKey = new Map(days.map((x) => [x.key, x]));
+  for (const ts of activityTs) {
+    const hit = byKey.get(dayKey(ts));
+    if (hit) hit.n++;
+  }
+  const max = Math.max(1, ...days.map((x) => x.n));
+  $('#ax-from').textContent = days[0].label.toLowerCase();
+  setChildren($('#strip'), days.map((x) => {
+    const label = x.n + (x.n === 1 ? ' entry' : ' entries') + ' · ' + x.label;
+    return h('li', {
+      class: 'cell' + (x.n === 0 ? ' zero' : ''),
+      tabindex: '0',
+      'aria-label': label,
+      onmousemove: (ev) => showTipAt(ev.clientX, ev.clientY, label),
+      onmouseleave: hideTip,
+      onfocus: (ev) => { const r = ev.target.getBoundingClientRect(); showTipAt(r.left, r.top, label); },
+      onblur: hideTip,
+    }, h('div', { class: 'bar', style: 'height:' + Math.round((x.n / max) * 100) + '%' }));
+  }));
+}
+function showTipAt(x, y, text) {
+  const tip = $('#tip');
+  tip.textContent = text;
+  tip.style.display = 'block';
+  tip.style.left = Math.min(x + 12, window.innerWidth - 150) + 'px';
+  tip.style.top = Math.max(4, y - 34) + 'px';
+}
+function hideTip() { $('#tip').style.display = 'none'; }
+
+function renderRoster(d) {
+  if (d.agents.length === 0) {
+    setChildren($('#roster'), h('div', { class: 'sub', style: 'color:var(--ink-3);font-size:12px' }, 'No agents on watch yet.'));
+    return;
+  }
+  setChildren($('#roster'), d.agents.map((a) =>
+    h('button', {
+      class: 'member ' + pClass(a.meta.provider),
+      'aria-pressed': String(state.agentFilter === a.name),
+      onclick: () => { state.agentFilter = state.agentFilter === a.name ? null : a.name; render(); },
+    },
+      h('span', { class: 'dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'who' },
+        h('div', { class: 'name' }, a.meta.icon + ' ' + a.meta.display),
+        h('div', { class: 'sub' }, a.models.length ? a.models.join(', ') : timeAgo(a.lastTs)),
+      ),
+      h('span', { class: 'n' }, String(a.count)),
+    ),
+  ));
+}
+
+function renderFeed(entries, d) {
+  const feed = $('#feed');
+  const bits = [];
+  const noteBits = [];
+  if (state.q) {
+    noteBits.push(
+      entries.length + (entries.length === 1 ? ' entry' : ' entries') + ' ranked by relevance for “' + state.q + '”',
+      h('button', { class: 'ghost', onclick: clearSearch }, 'clear'),
+    );
+  }
+  if (state.agentFilter) {
+    noteBits.push(
+      (state.q ? '· only ' : 'Showing only ') + state.agentFilter,
+      h('button', { class: 'ghost', onclick: () => { state.agentFilter = null; render(); } }, 'show everyone'),
+    );
+  }
+  if (noteBits.length > 0) bits.push(h('p', { class: 'feed-note' }, noteBits));
+  if (entries.length === 0) {
+    bits.push(h('div', { class: 'blank' },
+      state.q
+        ? h('p', {},
+            'Nothing in the log matches “' + state.q + '”' +
+            (state.agentFilter ? ' from ' + state.agentFilter : '') + '. ' +
+            (state.agentFilter ? 'Clear the roster filter or try fewer words.' : 'Try fewer words.'))
+        : state.agentFilter
+          ? h('p', {}, 'No entries from ' + state.agentFilter + ' in this scope.')
+          : h('div', {},
+              h('p', {}, 'The log is empty.'),
+              h('p', {}, 'Agents write entries as they work — run ', h('code', {}, 'ultrateam init'), ' in a project to put them on watch.')),
+    ));
+    setChildren(feed, bits);
+    return;
+  }
+  let currentDay = null;
+  let group = null;
+  let i = 0;
+  for (const e of entries) {
+    const k = state.q ? '__ranked' : dayKey(e.ts);
+    if (k !== currentDay) {
+      currentDay = k;
+      group = h('section', { class: 'day' },
+        state.q ? null : h('h2', { class: 'eyebrow' }, dayLabel(e.ts)));
+      bits.push(group);
+    }
+    group.append(renderEntry(e, Math.min(i++, 12), d));
+  }
+  setChildren(feed, bits);
+}
+
+function renderEntry(e, i, d) {
+  // The watch line answers "who was on duty" — color follows the agent's home
+  // provider (stable per agent); the model provider stays visible as text.
+  const cls = pClass(e.meta.provider) + (e.kind === 'handoff' ? ' handoff' : '');
+  const open = state.openIds.has(e.id);
+  const showProject = d.scope === 'all';
+  const detailId = 'detail-' + e.id;
+  const card = h('article', {
+    class: 'card' + (open ? ' open' : ''),
+    'data-id': e.id,
+    onclick: (ev) => { if (!ev.target.closest('button')) toggle(e.id); },
+  },
+    h('div', { class: 'meta' },
+      h('span', { class: 't' }, clock(e.ts)),
+      h('span', { class: 'who' }, e.meta.icon + ' ' + e.meta.display),
+      e.agent.model ? h('span', {}, e.agent.model) : null,
+      h('span', { class: 'badge' }, e.kind === 'handoff' ? '⇄ handoff' : e.kind),
+      e.branch ? h('span', {}, e.branch) : null,
+      showProject ? h('span', {}, e.project) : null,
+      h('span', { class: 't', title: e.ts }, timeAgo(e.ts)),
+    ),
+    h('h3', {},
+      h('button', {
+        class: 'tbtn',
+        'aria-expanded': String(open),
+        'aria-controls': detailId,
+        onclick: () => toggle(e.id),
+      }, e.title),
+    ),
+    h('p', { class: 'sum' }, e.summary),
+    h('div', { class: 'detail', id: detailId },
+      e.open_threads.length ? h('div', {}, h('h4', {}, 'Open threads'), h('ul', { class: 'threads' }, e.open_threads.map((t) => h('li', {}, t)))) : null,
+      e.decisions.length ? h('div', {}, h('h4', {}, 'Decisions'), h('ul', {}, e.decisions.map((t) => h('li', {}, t)))) : null,
+      e.files.length ? h('div', {}, h('h4', {}, 'Files'), h('div', { class: 'chips' }, e.files.map((f) => h('span', { class: 'chip' }, f)))) : null,
+      e.tags.length ? h('div', {}, h('h4', {}, 'Tags'), h('div', { class: 'chips' }, e.tags.map((t) => h('span', { class: 'chip' }, t)))) : null,
+      h('div', { class: 'idline' }, e.id + ' · ' + e.projectPath),
+    ),
+  );
+  return h('div', { class: 'entry ' + cls, style: '--i:' + i },
+    h('div', { class: 'node', 'aria-hidden': 'true' }), card);
+}
+
+/* Toggle in place: no full re-render, so focus, scroll position, and every
+   other card survive. */
+function toggle(id) {
+  const open = !state.openIds.has(id);
+  if (open) state.openIds.add(id);
+  else state.openIds.delete(id);
+  const card = document.querySelector('.card[data-id="' + CSS.escape(id) + '"]');
+  if (card) {
+    card.classList.toggle('open', open);
+    const btn = card.querySelector('.tbtn');
+    if (btn) btn.setAttribute('aria-expanded', String(open));
+  }
+}
+function clearSearch() { state.q = ''; $('#q').value = ''; refresh(); }
+
+/* ---------- controls ---------- */
+$('#project').addEventListener('change', (ev) => {
+  state.scope = ev.target.value;
+  state.agentFilter = null;
+  refresh();
+});
+let qTimer = null;
+$('#q').addEventListener('input', (ev) => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => { state.q = ev.target.value.trim(); refresh(); }, 250);
+});
+$('#theme').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme;
+  const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = cur ? (cur === 'dark' ? 'light' : 'dark') : (sysDark ? 'light' : 'dark');
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('ut-theme', next); } catch {}
+});
+try {
+  const saved = localStorage.getItem('ut-theme');
+  if (saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+} catch {}
+const urlTheme = new URLSearchParams(location.search).get('theme');
+if (urlTheme === 'dark' || urlTheme === 'light') document.documentElement.dataset.theme = urlTheme;
+
+/* live log: poll quietly while idle; unchanged payloads skip rendering, so
+   the DOM (and focus, and screen readers) stay untouched */
+setInterval(() => {
+  if (!document.hidden && !state.q) refresh();
+}, 20000);
+
+refresh();
+</script>
+</body>
+</html>

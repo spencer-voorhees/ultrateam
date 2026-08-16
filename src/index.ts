@@ -9,4 +9,5 @@ export { formatEntry, agentLabel, timeAgo } from './format.js';
 export { CONTRACT, applyContract } from './contract.js';
 export { init, doctor } from './setup/init.js';
 export { startServer } from './server.js';
+export { startViewer } from './viewer/server.js';
 export { VERSION } from './version.js';

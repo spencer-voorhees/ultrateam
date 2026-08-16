@@ -52,11 +52,17 @@ Then just work. Agents checkpoint as they go. When you switch tools:
 ## The diary from the human side
 
 ```bash
+ultrateam view                     # the watch log in your browser
 ultrateam list                     # recent entries: who did what, when
 ultrateam recall auth middleware   # search the diary
 ultrateam show <id>                # one entry in full
 ultrateam log -t "..." -m "..."    # write an entry yourself
 ```
+
+`ultrateam view` serves a local web viewer (loopback-only, zero dependencies): the
+session timeline as a **watch line** colored by the agent on duty, handoff markers,
+a team roster with per-agent counts and models, ranked search, and a 14-day
+activity strip. Dark and light themes, keyboard accessible.
 
 Every entry is attributed: agent, model, and provider (inferred from the model id — an entry by Copilot running a Claude model is credited to both correctly).
 
@@ -93,6 +99,7 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | --- | --- |
 | `ultrateam init [--all]` | Set up store, contract, and agent registrations |
 | `ultrateam doctor` | Health check: index, contract, per-agent wiring |
+| `ultrateam view [-p port]` | Local web viewer: timeline, roster, search |
 | `ultrateam serve` | Run the MCP server (agents launch this; stdio) |
 | `ultrateam recall <query> [-f files] [-a]` | Ranked search of the diary |
 | `ultrateam list [-n] [-a]` | Recent entries with attribution |
@@ -102,9 +109,9 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 
 ## Status & roadmap
 
-Early. Working today: the store, the index, the MCP server, init/doctor, the CLI. Requires Node ≥ 22.5 (uses the built-in `node:sqlite`; no native dependencies).
+Early. Working today: the store, the index, the MCP server, init/doctor, the CLI, and the web viewer. Requires Node ≥ 22.13 (uses the built-in `node:sqlite`; no native dependencies).
 
-- [ ] **Web viewer** (`ultrateam view`) — session timeline and team roster with provider icons
+- [x] **Web viewer** (`ultrateam view`) — session timeline and team roster with per-agent colors
 - [ ] **Import** — backfill the diary from agents' native histories (Claude Code JSONL, Cursor's DB)
 - [ ] Optional semantic search behind a flag
 - [ ] Team sync — share the diary beyond one machine

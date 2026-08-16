@@ -222,6 +222,62 @@ test('invalid limit falls back to the default instead of returning nothing', () 
   index.close();
 });
 
+test('agentSummaries keeps comma-bearing model ids intact', () => {
+  const index = tempIndex();
+  index.upsert(makeEntry({ agent: { name: 'weird', model: 'llama-3, fine-tuned' } }), '/proj');
+  index.upsert(makeEntry({ agent: { name: 'weird', model: 'plain-model' } }), '/proj');
+  const weird = index.agentSummaries().find((a) => a.name === 'weird');
+  assert.ok(weird);
+  assert.deepEqual(weird.models.sort(), ['llama-3, fine-tuned', 'plain-model']);
+  index.close();
+});
+
+test('agentSummaries and projectSummaries use latest-wins, not MAX()', () => {
+  const index = tempIndex();
+  // 'openrouter' > 'anthropic' lexicographically; latest entry is anthropic.
+  index.upsert(makeEntry({ agent: { name: 'claude-code', provider: 'openrouter' } }), '/proj');
+  index.upsert(makeEntry({ agent: { name: 'claude-code', model: 'claude-fable-5' } }), '/proj');
+  const a = index.agentSummaries().find((x) => x.name === 'claude-code');
+  assert.equal(a?.provider, 'anthropic');
+  assert.equal(a?.count, 2);
+  // project renamed: 'zzz-old' > 'demo' lexicographically; latest is demo.
+  const other = tempIndex();
+  other.upsert(makeEntry({ project: 'zzz-old' }), '/renamed');
+  other.upsert(makeEntry({ project: 'demo' }), '/renamed');
+  assert.equal(other.projectSummaries()[0].name, 'demo');
+  index.close();
+  other.close();
+});
+
+test('stats reports scope-wide truth with latest-handoff open threads', () => {
+  const index = tempIndex();
+  index.upsert(
+    makeEntry({ kind: 'handoff', title: 'Old handoff', summary: 'x', open_threads: ['a', 'b', 'c'] }),
+    '/proj',
+  );
+  index.upsert(
+    makeEntry({ kind: 'handoff', title: 'Latest handoff', summary: 'x', open_threads: ['only one'] }),
+    '/proj',
+  );
+  index.upsert(makeEntry({ title: 'Plain session', summary: 'x' }), '/proj');
+  const s = index.stats('/proj');
+  assert.equal(s.entries, 3);
+  assert.equal(s.handoffs, 2);
+  assert.equal(s.openThreads, 1);
+  assert.equal(index.stats('/elsewhere').entries, 0);
+  index.close();
+});
+
+test('recentTs returns scope timestamps since a bound', () => {
+  const index = tempIndex();
+  index.upsert(makeEntry(), '/proj');
+  index.upsert(makeEntry(), '/other');
+  assert.equal(index.recentTs('/proj', new Date(0).toISOString()).length, 1);
+  assert.equal(index.recentTs(undefined, new Date(0).toISOString()).length, 2);
+  assert.equal(index.recentTs('/proj', new Date(Date.now() + 60_000).toISOString()).length, 0);
+  index.close();
+});
+
 test('get returns a stored entry with its project path', () => {
   const index = tempIndex();
   const entry = makeEntry();
