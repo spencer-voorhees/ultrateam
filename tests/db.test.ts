@@ -77,6 +77,15 @@ test('recall matches prefixes while the user is typing', () => {
   index.close();
 });
 
+test('recall treats the workspace name as searchable entry context', () => {
+  const index = tempIndex();
+  const matching = makeEntry({ project: 'ultrateam', title: 'Unrelated title', summary: 'No repeated project name.' });
+  index.upsert(matching, '/proj');
+  const results = index.recall({ query: 'ultrateam' });
+  assert.equal(results[0]?.entry.id, matching.id);
+  index.close();
+});
+
 test('recall tolerates one typo when strict search has no matches', () => {
   const index = tempIndex();
   const matching = makeEntry({ title: 'Authentication middleware', summary: 'Secured the route.' });

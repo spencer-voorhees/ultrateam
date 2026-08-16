@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Index } from '../store/db.js';
+import { Index, type ScoredEntry } from '../store/db.js';
 import { findProjectRoot } from '../store/jsonl.js';
 import { knownRoots } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
@@ -77,10 +77,6 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
       }
     }
 
-    const results = q
-      ? index.recall({ query: q, workspaceId: scope ?? undefined, limit: 100 })
-      : index.list({ workspaceId: scope ?? undefined, limit: 200 });
-
     const projects = index.projectSummaries();
     // A freshly-inited project has a scope but zero entries — the client's
     // <select> still needs an option for it.
@@ -93,6 +89,35 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
         lastTs: '',
         roots: startRoot ? [startRoot] : [],
       });
+    }
+
+    // Workspace names are first-class search targets. An exact name query is
+    // interpreted as "show this workspace" so every entry is returned, rather
+    // than only entries that happen to repeat the name in their prose.
+    const normalizedQuery = q.toLocaleLowerCase();
+    const matchingWorkspaceIds = q
+      ? projects
+          .filter((project) => project.name.trim().toLocaleLowerCase() === normalizedQuery)
+          .map((project) => project.id)
+      : [];
+    let results: ScoredEntry[];
+    if (!q) {
+      results = index.list({ workspaceId: scope ?? undefined, limit: 200 });
+    } else if (scope && matchingWorkspaceIds.includes(scope)) {
+      results = index.list({ workspaceId: scope, limit: 200 });
+    } else if (!scope && matchingWorkspaceIds.length > 0) {
+      const seen = new Set<string>();
+      results = matchingWorkspaceIds
+        .flatMap((workspaceId) => index.list({ workspaceId, limit: 200 }))
+        .filter((result) => {
+          if (seen.has(result.entry.id)) return false;
+          seen.add(result.entry.id);
+          return true;
+        })
+        .sort((a, b) => b.entry.ts.localeCompare(a.entry.ts))
+        .slice(0, 200);
+    } else {
+      results = index.recall({ query: q, workspaceId: scope ?? undefined, limit: 100 });
     }
 
     const fourteenDaysAgo = new Date(now - 15 * 86_400_000).toISOString();

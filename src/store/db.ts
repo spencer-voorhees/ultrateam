@@ -88,6 +88,7 @@ function sanitizeLimit(limit: number | undefined, fallback: number): number {
 
 function ftsBody(e: Entry): string {
   return [
+    e.project,
     e.title,
     e.summary,
     e.files.join(' '),
