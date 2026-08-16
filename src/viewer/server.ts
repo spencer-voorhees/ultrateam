@@ -23,6 +23,7 @@ export interface ViewerHandle {
 
 const DEFAULT_PORT = 4272;
 const HTML_PATH = fileURLToPath(new URL('./index.html', import.meta.url));
+const ICON_PATH = fileURLToPath(new URL('./ultrateam-icon.png', import.meta.url));
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
@@ -152,6 +153,7 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
   const port = opts.port ?? DEFAULT_PORT;
   const startRoot = findProjectRoot(opts.cwd ?? process.cwd());
   const page = fs.readFileSync(HTML_PATH);
+  const icon = fs.readFileSync(ICON_PATH);
 
   const server = http.createServer((req, res) => {
     try {
@@ -167,6 +169,13 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
           'x-content-type-options': 'nosniff',
         });
         res.end(page);
+      } else if (url.pathname === '/ultrateam-icon.png') {
+        res.writeHead(200, {
+          'content-type': 'image/png',
+          'cache-control': 'no-cache',
+          'x-content-type-options': 'nosniff',
+        });
+        res.end(icon);
       } else if (url.pathname === '/api/state') {
         handleState(url, startRoot, res);
       } else {

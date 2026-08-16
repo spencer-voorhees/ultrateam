@@ -214,12 +214,13 @@ body.sidebar-shelved .top-nav-brand {
   height: 19px;
   flex-shrink: 0;
   display: block;
+  filter: drop-shadow(0 1px 5px rgba(84, 139, 255, 0.18));
 }
 
 .ultrateam-logo-text {
   font-size: 0.92rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-weight: 650;
+  letter-spacing: -0.025em;
   color: var(--text-primary);
   display: inline-block;
 }
@@ -478,7 +479,7 @@ body.sidebar-shelved .sidebar {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  min-height: 42px;
+  min-height: 38px;
   padding: 0.48rem 0.7rem;
   border-radius: var(--radius-sm);
   background: none;
@@ -523,15 +524,6 @@ body.sidebar-shelved .sidebar {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.agent-model-text {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ============================================================
    Main Document Content
    ============================================================ */
@@ -604,6 +596,9 @@ body.sidebar-shelved .sidebar {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
+.count-updated {
+  animation: count-settle 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
 
 /* Database Views Toolbar */
 .views-toolbar {
@@ -659,6 +654,11 @@ body.sidebar-shelved .sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+.timeline-feed.feed-refreshing {
+  opacity: 0.55;
+  transform: translateY(2px);
 }
 
 /* Card Block */
@@ -669,6 +669,20 @@ body.sidebar-shelved .sidebar {
   padding: 1.25rem 1.35rem;
   transition: border-color 0.16s ease, background 0.16s ease;
   overflow-wrap: anywhere;
+}
+.notion-card.entry-new {
+  animation: entry-arrive 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.notion-card.entry-new::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: entry-highlight 1.4s ease-out both;
+}
+.notion-card {
+  position: relative;
 }
 .notion-card:hover {
   background: var(--card-hover);
@@ -995,6 +1009,11 @@ body.sidebar-shelved .sidebar {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
+  transform-origin: top;
+  animation: panel-expand 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.card-inline-panel.panel-closing {
+  animation: panel-collapse 0.14s ease-in both;
 }
 .inline-panel-header {
   display: flex;
@@ -1101,6 +1120,42 @@ body.sidebar-shelved .sidebar {
   padding: 3.5rem 1.5rem;
   text-align: center;
   color: var(--text-secondary);
+}
+
+@keyframes entry-arrive {
+  from { opacity: 0; transform: translateY(-10px) scale(0.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes entry-highlight {
+  0% { box-shadow: inset 3px 0 0 #6e8cff, 0 0 0 1px rgba(110, 140, 255, 0.2); }
+  100% { box-shadow: inset 3px 0 0 transparent, 0 0 0 1px transparent; }
+}
+@keyframes panel-expand {
+  from { opacity: 0; transform: translateY(-4px) scaleY(0.985); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes panel-collapse {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to { opacity: 0; transform: translateY(-3px) scaleY(0.985); }
+}
+@keyframes count-settle {
+  from { opacity: 0.45; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-feed,
+  .notion-card,
+  .card-inline-panel,
+  .sidebar,
+  .workspace,
+  .nav-bar,
+  .sidebar-backdrop,
+  .toast-box {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media (max-width: 820px) {
@@ -1308,12 +1363,6 @@ body.sidebar-shelved .sidebar {
     <symbol id="icon-layers" viewBox="0 0 24 24">
       <path fill="currentColor" d="M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z"/>
     </symbol>
-    <!-- Ultrateam Official Logo (Modern Tech Dimensional Isometric Cube) -->
-    <symbol id="icon-ultrateam" viewBox="0 0 24 24">
-      <path fill="currentColor" fill-opacity="0.95" d="M12 2.2L20.8 7.3 12 12.4 3.2 7.3 12 2.2z"/>
-      <path fill="currentColor" fill-opacity="0.65" d="M3.2 8.4L12 13.5v9.3L3.2 17.7V8.4z"/>
-      <path fill="currentColor" fill-opacity="0.4" d="M12 13.5l8.8-5.1v9.3L12 22.8v-9.3z"/>
-    </symbol>
     <!-- Copy Icon -->
     <symbol id="icon-copy" viewBox="0 0 24 24">
       <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
@@ -1338,7 +1387,7 @@ body.sidebar-shelved .sidebar {
       </svg>
     </button>
     <div class="app-brand top-nav-brand">
-      <svg class="ultrateam-logo-icon" viewBox="0 0 24 24"><use href="#icon-ultrateam"/></svg>
+      <img class="ultrateam-logo-icon" src="/ultrateam-icon.png" alt="" aria-hidden="true" draggable="false">
       <span class="ultrateam-logo-text">ultrateam</span>
     </div>
   </div>
@@ -1367,7 +1416,7 @@ body.sidebar-shelved .sidebar {
   <aside class="sidebar" id="filter-sidebar">
     <div class="sidebar-header">
       <div class="app-brand">
-        <svg class="ultrateam-logo-icon" viewBox="0 0 24 24"><use href="#icon-ultrateam"/></svg>
+        <img class="ultrateam-logo-icon" src="/ultrateam-icon.png" alt="" aria-hidden="true" draggable="false">
         <span class="ultrateam-logo-text">ultrateam</span>
       </div>
       <button id="sidebar-shelf" class="nav-btn icon-only sidebar-shelf-btn" type="button" aria-label="Hide sidebar" title="Hide sidebar">
@@ -1381,9 +1430,9 @@ body.sidebar-shelved .sidebar {
       </button>
     </div>
     <div id="sidebar-filter-groups" style="display:contents;">
-    <!-- Models & Agents List (Above Workspaces) -->
+    <!-- Harness filter (Above Workspaces) -->
     <div class="sidebar-section">
-      <h3 class="sidebar-group-title">Models &amp; agents</h3>
+      <h3 class="sidebar-group-title">Harnesses</h3>
       <div class="nav-list" id="roster-list"></div>
     </div>
 
@@ -1463,10 +1512,11 @@ const state = {
   kindFilter: 'all',
   agentFilters: new Set(),
   expandedPanels: new Map(),
-  selectedIndex: -1,
+  selectedEntryId: null,
   data: null,
   rawPayload: '',
   seq: 0,
+  newEntryIds: new Set(),
 };
 
 const PROVIDER_METADATA = {
@@ -1585,11 +1635,13 @@ function dayKey(iso) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-async function fetchState() {
+async function fetchState({ transition = false } = {}) {
   const currentSeq = ++state.seq;
   const params = new URLSearchParams();
   if (state.scope) params.set('project', state.scope);
   if (state.query) params.set('q', state.query);
+  const stream = $('#feed-stream');
+  if (transition && state.data) stream.classList.add('feed-refreshing');
 
   try {
     const res = await fetch('/api/state?' + params.toString());
@@ -1598,14 +1650,32 @@ async function fetchState() {
     const raw = await res.text();
     if (currentSeq !== state.seq) return;
     if (raw === state.rawPayload) return;
+    const nextData = JSON.parse(raw);
+    const previousIds = new Set((state.data?.entries || []).map((entry) => entry.id));
+    state.newEntryIds = state.data && !transition
+      ? new Set((nextData.entries || []).filter((entry) => !previousIds.has(entry.id)).map((entry) => entry.id))
+      : new Set();
     state.rawPayload = raw;
-    state.data = JSON.parse(raw);
+    state.data = nextData;
     if (!state.scope) state.scope = state.data.scope;
     render();
   } catch (err) {
     if (currentSeq !== state.seq) return;
     renderError(err.message);
+  } finally {
+    if (transition && currentSeq === state.seq) {
+      requestAnimationFrame(() => stream.classList.remove('feed-refreshing'));
+    }
   }
+}
+
+function renderWithFeedTransition() {
+  const stream = $('#feed-stream');
+  stream.classList.add('feed-refreshing');
+  requestAnimationFrame(() => {
+    render();
+    requestAnimationFrame(() => stream.classList.remove('feed-refreshing'));
+  });
 }
 
 function render() {
@@ -1617,6 +1687,7 @@ function render() {
   renderProjectNav(d);
   renderFeed(d);
   updateThemeIcon();
+  requestAnimationFrame(() => state.newEntryIds.clear());
 
   const currentProjectName = d.scope === 'all'
     ? 'All Workspaces'
@@ -1626,10 +1697,20 @@ function render() {
 }
 
 function renderOverview(d) {
-  $('#stat-total').textContent = String(d.stats.entries || 0);
-  $('#stat-handoffs').textContent = String(d.stats.handoffs || 0);
-  $('#stat-threads').textContent = String(d.stats.openThreads || 0);
-  $('#stat-agents').textContent = String(d.agents ? d.agents.length : 0);
+  setCount('#stat-total', d.stats.entries || 0);
+  setCount('#stat-handoffs', d.stats.handoffs || 0);
+  setCount('#stat-threads', d.stats.openThreads || 0);
+  setCount('#stat-agents', d.agents ? d.agents.length : 0);
+}
+
+function setCount(selector, value) {
+  const el = $(selector);
+  const next = String(value);
+  if (el.textContent === next) return;
+  el.textContent = next;
+  el.classList.remove('count-updated');
+  void el.offsetWidth;
+  el.classList.add('count-updated');
 }
 
 function renderRoster(d) {
@@ -1642,7 +1723,7 @@ function renderRoster(d) {
     'aria-pressed': String(isAllActive),
     onclick: () => {
       state.agentFilters.clear();
-      render();
+      renderWithFeedTransition();
     },
   },
     h('div', { style: 'display:flex;align-items:center;gap:0.45rem;min-width:0;' },
@@ -1662,8 +1743,6 @@ function renderRoster(d) {
   const agentItems = d.agents.map((a) => {
     const meta = getProviderMeta(a.name, a.meta?.provider || a.provider);
     const isActive = state.agentFilters.has(a.name);
-    const modelsStr = a.models && a.models.length ? a.models.join(', ') : timeAgo(a.lastTs);
-
     return h('button', {
       class: `agent-item-btn ${isActive ? 'active' : ''}`,
       'aria-pressed': String(isActive),
@@ -1673,7 +1752,7 @@ function renderRoster(d) {
         } else {
           state.agentFilters.add(a.name);
         }
-        render();
+        renderWithFeedTransition();
       },
     },
       h('div', { style: 'display:flex;align-items:center;gap:0.45rem;min-width:0;' },
@@ -1681,8 +1760,7 @@ function renderRoster(d) {
           svgIcon(meta.icon, 13, 13)
         ),
         h('div', { style: 'min-width:0;' },
-          h('div', { class: 'agent-name-text' }, getAgentDisplayName(a.name, a.meta?.display, meta)),
-          h('div', { class: 'agent-model-text', title: modelsStr }, modelsStr)
+          h('div', { class: 'agent-name-text' }, getAgentDisplayName(a.name, a.meta?.display, meta))
         )
       ),
       h('span', { class: 'nav-count-pill' }, String(a.count))
@@ -1705,7 +1783,7 @@ function renderProjectNav(d) {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
       onclick: () => {
         state.scope = p.id;
-        fetchState();
+        fetchState({ transition: true });
       },
     },
       h('div', { class: 'nav-item-left' },
@@ -1723,10 +1801,10 @@ function renderFeed(d) {
   const totalHandoffs = entries.filter((e) => e.kind === 'handoff').length;
   const totalSessions = entries.filter((e) => e.kind === 'session').length;
   const totalNotes = entries.filter((e) => e.kind === 'note').length;
-  $('#badge-all').textContent = String(entries.length);
-  $('#badge-handoff').textContent = String(totalHandoffs);
-  $('#badge-session').textContent = String(totalSessions);
-  $('#badge-note').textContent = String(totalNotes);
+  setCount('#badge-all', entries.length);
+  setCount('#badge-handoff', totalHandoffs);
+  setCount('#badge-session', totalSessions);
+  setCount('#badge-note', totalNotes);
 
   if (state.kindFilter === 'handoff') entries = entries.filter((e) => e.kind === 'handoff');
   else if (state.kindFilter === 'session') entries = entries.filter((e) => e.kind === 'session');
@@ -1758,17 +1836,17 @@ function renderFeed(d) {
     return;
   }
 
-  setChildren(stream, entries.map((entry, index) => renderCard(entry, index, d)));
+  setChildren(stream, entries.map((entry) => renderCard(entry, d)));
 }
 
-function renderCard(entry, index, d) {
+function renderCard(entry, d) {
   const providerMeta = getProviderMeta(entry.agent?.name || entry.meta?.display, entry.agent?.provider || entry.meta?.provider);
   const kindMeta = ENTRY_KIND_METADATA[entry.kind] || { icon: '#icon-file', label: entry.kind };
   const activePanel = state.expandedPanels.get(entry.id) || null;
-  const isSelected = state.selectedIndex === index;
+  const isSelected = state.selectedEntryId === entry.id;
 
   const card = h('article', {
-    class: `notion-card ${isSelected ? 'selected' : ''}`,
+    class: `notion-card ${isSelected ? 'selected' : ''} ${state.newEntryIds.has(entry.id) ? 'entry-new' : ''}`,
     'data-id': entry.id,
   },
     // Header Line
@@ -1964,8 +2042,21 @@ function formatEntryText(entry) {
 }
 
 function toggleCardPanel(id, panel = 'details') {
-  if (state.expandedPanels.get(id) === panel) state.expandedPanels.delete(id);
-  else state.expandedPanels.set(id, panel);
+  if (state.expandedPanels.get(id) === panel) {
+    const card = $(`.notion-card[data-id="${id}"]`);
+    const openPanel = card?.querySelector('.card-inline-panel');
+    if (openPanel && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      openPanel.classList.add('panel-closing');
+      openPanel.addEventListener('animationend', () => {
+        state.expandedPanels.delete(id);
+        render();
+      }, { once: true });
+      return;
+    }
+    state.expandedPanels.delete(id);
+  } else {
+    state.expandedPanels.set(id, panel);
+  }
   render();
 }
 
@@ -1976,7 +2067,7 @@ function resetFilters() {
   $('#search-input').value = '';
   $('#search-clear').style.display = 'none';
   $$('.view-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.kind === 'all'));
-  fetchState();
+  fetchState({ transition: true });
 }
 
 let toastTimer = null;
@@ -2021,7 +2112,7 @@ searchInput.addEventListener('input', (ev) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     state.query = val;
-    fetchState();
+    fetchState({ transition: true });
   }, 220);
 });
 
@@ -2029,7 +2120,7 @@ searchClear.addEventListener('click', () => {
   searchInput.value = '';
   searchClear.style.display = 'none';
   state.query = '';
-  fetchState();
+  fetchState({ transition: true });
   searchInput.focus();
 });
 
@@ -2038,7 +2129,7 @@ $$('.view-tab-btn').forEach((btn) => {
     $$('.view-tab-btn').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     state.kindFilter = btn.dataset.kind;
-    render();
+    renderWithFeedTransition();
   });
 });
 
@@ -2181,7 +2272,9 @@ window.addEventListener('keydown', (ev) => {
       sidebarToggle.focus();
       return;
     }
-    const selectedCard = $$('.notion-card')[state.selectedIndex];
+    const selectedCard = state.selectedEntryId
+      ? $(`.notion-card[data-id="${state.selectedEntryId}"]`)
+      : null;
     if (selectedCard?.dataset.id && state.expandedPanels.has(selectedCard.dataset.id)) {
       state.expandedPanels.delete(selectedCard.dataset.id);
       render();
@@ -2196,17 +2289,22 @@ window.addEventListener('keydown', (ev) => {
 
   const posts = $$('.notion-card');
   if (posts.length === 0) return;
+  const currentIndex = posts.findIndex((post) => post.dataset.id === state.selectedEntryId);
+
+  const selectCardAt = (index) => {
+    const target = posts[index];
+    if (!target) return;
+    state.selectedEntryId = target.dataset.id;
+    render();
+    $(`.notion-card[data-id="${state.selectedEntryId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
 
   if (ev.key.toLowerCase() === 'j') {
-    state.selectedIndex = Math.min(posts.length - 1, state.selectedIndex + 1);
-    posts[state.selectedIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    render();
+    selectCardAt(Math.min(posts.length - 1, currentIndex + 1));
   } else if (ev.key.toLowerCase() === 'k') {
-    state.selectedIndex = Math.max(0, state.selectedIndex - 1);
-    posts[state.selectedIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    render();
+    selectCardAt(Math.max(0, currentIndex < 0 ? 0 : currentIndex - 1));
   } else if (ev.key.toLowerCase() === 'o' || ev.key === 'Enter') {
-    const activeCard = posts[state.selectedIndex];
+    const activeCard = currentIndex >= 0 ? posts[currentIndex] : null;
     if (activeCard) {
       const id = activeCard.dataset.id;
       toggleCardPanel(id, 'details');
