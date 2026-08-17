@@ -2080,9 +2080,13 @@ function renderProjectNav(d) {
   // "All" shows the total across every workspace (stable), not the current
   // scope's count — otherwise it changed every time you switched workspaces.
   const totalAcrossWorkspaces = d.projects.reduce((n, p) => n + (p.count || 0), 0);
+  // Keep the left nav in a fixed alphabetical order — the server orders by most
+  // recent activity, which makes workspaces jump around as you work.
+  const sortedProjects = [...d.projects].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const items = [
     { id: 'all', name: 'All', count: totalAcrossWorkspaces },
-    ...d.projects,
+    ...sortedProjects,
   ];
 
   setChildren(list, items.map((p) => {
