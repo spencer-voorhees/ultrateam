@@ -125,6 +125,7 @@ test('viewer supports first launch before any workspace exists', async () => {
     const html = await fetch(handle.url).then((r) => r.text());
     assert.ok(html.includes('No workspaces yet'));
     assert.ok(html.includes('ultrateam init'));
+    assert.ok(!html.includes('then refresh this page'));
   } finally {
     handle?.close();
     if (previousHome === undefined) delete process.env.HOME;
