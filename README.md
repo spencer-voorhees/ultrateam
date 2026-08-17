@@ -37,11 +37,10 @@ Install with one line — it fetches, builds, and puts `ultrateam` on your PATH.
 curl -fsSL https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.sh | bash
 ```
 
-**Windows**
-```bat
-npm install -g github:spencer-voorhees/ultrateam
+**Windows (PowerShell)**
+```powershell
+irm https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.ps1 | iex
 ```
-(npm fetches, builds, and links it — no PowerShell script, so locked-down machines that block unsigned scripts install fine. Works on macOS/Linux too.)
 
 Then, in any project:
 ```bash

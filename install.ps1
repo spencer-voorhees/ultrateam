@@ -32,12 +32,20 @@ if (Test-Path (Join-Path $dir ".git")) {
 }
 
 Set-Location $dir
+
+# Run npm through cmd (npm.cmd), never PowerShell's npm.ps1/tsc.ps1 shims — those
+# are script files subject to the execution policy and can fail with "not signed".
+function Npm ($npmArgs) {
+  cmd /c "npm $npmArgs"
+  if ($LASTEXITCODE -ne 0) { Fail "npm $npmArgs failed (exit $LASTEXITCODE)" }
+}
+
 Say "-> installing dependencies"
-npm install --no-audit --no-fund --silent
+Npm "install --no-audit --no-fund"
 Say "-> building"
-npm run build --silent
+Npm "run build"
 Say "-> linking the ultrateam command"
-npm link
+Npm "link"
 
 Say "ultrateam installed. Next: cd your-project; ultrateam init"
 if (-not (Get-Command ultrateam -ErrorAction SilentlyContinue)) {
