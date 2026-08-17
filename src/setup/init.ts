@@ -234,7 +234,7 @@ function ensureGlobalGitignore(): string[] {
       : existing.replace(/\n?$/, '\n') + `${line}\n`;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, next, 'utf8');
-  return [`✓ added ${line} to your global gitignore (${tildify(file)}) — the store never lands in any repo`];
+  return [`✓ added ${line} to your global gitignore (${tildify(file)})`];
 }
 
 const NUDGE_MARKER = '<!-- ultrateam:begin -->';
@@ -282,7 +282,7 @@ export function initGlobal(cliEntry: string, opts: InitOptions = {}): string[] {
   const report: string[] = [];
   const cmd = serverCommand(cliEntry);
 
-  report.push('Setting up ultrateam globally. Nothing is written into any project.');
+  report.push('Setting up ultrateam globally.');
   report.push('');
 
   for (const target of AGENT_TARGETS) {
@@ -312,7 +312,7 @@ export function initGlobal(cliEntry: string, opts: InitOptions = {}): string[] {
   report.push(...ensureGlobalNudge(opts));
   report.push('');
   report.push(`Server launch: ${cmd.command} ${cmd.args.join(' ')}`);
-  report.push('Done. This created no changes in any repository.');
+  report.push('Done.');
   return report;
 }
 
