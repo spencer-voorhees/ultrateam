@@ -209,11 +209,16 @@ body.sidebar-shelved .nav-bar {
   color: var(--text-primary);
 }
 .top-nav-brand {
+  display: flex;
+}
+/* The sidebar shows the app logo when open, so only surface the logo in the top
+   bar once the sidebar is shelved; the workspace name is always shown. */
+.top-nav-brand .ultrateam-logo-icon {
   display: none;
 }
-html.sidebar-shelved .top-nav-brand,
-body.sidebar-shelved .top-nav-brand {
-  display: flex;
+html.sidebar-shelved .top-nav-brand .ultrateam-logo-icon,
+body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
+  display: block;
 }
 
 .ultrateam-logo-icon {
@@ -230,6 +235,10 @@ body.sidebar-shelved .top-nav-brand {
   letter-spacing: -0.025em;
   color: var(--text-primary);
   display: inline-block;
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .breadcrumb-icon {
@@ -557,8 +566,7 @@ body.sidebar-shelved .sidebar {
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
-  padding-bottom: 1.55rem;
+  padding-bottom: 1.05rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1277,6 +1285,9 @@ body.sidebar-shelved .sidebar {
   body.sidebar-shelved .top-nav-brand {
     display: flex;
   }
+  .top-nav-brand .ultrateam-logo-icon {
+    display: block; /* sidebar is a drawer on mobile, so show the logo in the top bar */
+  }
   .mobile-menu-icon {
     display: block;
   }
@@ -1310,7 +1321,6 @@ body.sidebar-shelved .sidebar {
     padding: 0 0.65rem;
     gap: 0.45rem;
   }
-  .top-nav-brand .ultrateam-logo-text,
   .search-shortcut {
     display: none;
   }
@@ -1443,7 +1453,7 @@ body.sidebar-shelved .sidebar {
     </button>
     <div class="app-brand top-nav-brand">
       <img class="ultrateam-logo-icon" src="/ultrateam-icon.png" alt="" aria-hidden="true" draggable="false">
-      <span class="ultrateam-logo-text">ultrateam</span>
+      <span class="ultrateam-logo-text" id="top-workspace">Workspace</span>
     </div>
   </div>
 
@@ -1503,11 +1513,7 @@ body.sidebar-shelved .sidebar {
   <main class="document-main">
     <!-- Page Header (Notion Database Page Top) -->
     <div class="page-header">
-      <div class="page-title-row">
-        <h1 class="page-title" id="page-title-text"><span class="skeleton-shimmer skeleton-title"></span></h1>
-      </div>
-
-      <!-- Properties Grid -->
+      <!-- Properties Grid (workspace name now lives in the top bar) -->
       <div class="properties-grid">
         <div class="property-chip">
           <span class="property-label">Total Entries</span>
@@ -1793,7 +1799,7 @@ function render({ animateStats = false } = {}) {
     : d.scope === 'all'
       ? 'All Workspaces'
       : (d.projects.find((p) => p.id === d.scope)?.name || 'Workspace');
-  $('#page-title-text').textContent = currentProjectName;
+  $('#top-workspace').textContent = currentProjectName;
   document.title = `ultrateam — ${currentProjectName}`;
 }
 
