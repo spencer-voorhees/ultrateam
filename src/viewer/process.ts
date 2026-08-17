@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -180,7 +180,10 @@ export async function stopViewer(
   }
   if (process.platform === 'win32') {
     try {
-      execSync(`taskkill /PID ${state.pid} /T /F`, { stdio: 'ignore' });
+      execFileSync('taskkill', ['/PID', String(state.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
     } catch {
       try { process.kill(state.pid, 'SIGKILL'); } catch {}
     }
@@ -201,4 +204,3 @@ export async function stopViewer(
   }
   removeViewerState(state.instanceId, file);
 }
-

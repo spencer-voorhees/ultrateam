@@ -219,7 +219,11 @@ program
     const mode: ViewerMode = process.env.ULTRATEAM_VIEWER_MODE === 'background'
       ? 'background'
       : 'foreground';
-    const handle = await startViewer({ port: opts.port, instanceId });
+    const handle = await startViewer({
+      port: opts.port,
+      instanceId,
+      portFallback: mode === 'background',
+    });
     const state: ViewerState = {
       version: 1,
       instanceId,
@@ -447,8 +451,8 @@ program
       process.exit(1);
     }
     // npm through the shell so Windows uses npm.cmd (never the policy-gated npm.ps1).
-    const run = (cmd: string) => execSync(cmd, { cwd: pkgRoot, stdio: 'inherit' });
-    const head = () => execSync('git rev-parse --short HEAD', { cwd: pkgRoot }).toString().trim();
+    const run = (cmd: string) => execSync(cmd, { cwd: pkgRoot, stdio: 'inherit', windowsHide: true });
+    const head = () => execSync('git rev-parse --short HEAD', { cwd: pkgRoot, windowsHide: true }).toString().trim();
     try {
       const before = head();
       console.error(`ultrateam v${VERSION} (${before}) — checking for updates...`);
@@ -464,7 +468,7 @@ program
       run('npm run build');
       if (process.platform === 'win32') {
         try {
-          const prefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+          const prefix = execSync('npm config get prefix', { encoding: 'utf8', windowsHide: true }).trim();
           const cliJs = path.join(pkgRoot, 'dist', 'cli.js');
           for (const candidate of [
             path.join(prefix, 'ultrateam.ps1'),

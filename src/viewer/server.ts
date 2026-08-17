@@ -15,6 +15,8 @@ export interface ViewerOptions {
   port?: number;
   cwd?: string;
   instanceId?: string;
+  /** Try subsequent loopback ports when the preferred port is occupied. */
+  portFallback?: boolean;
 }
 
 export interface ViewerHandle {
@@ -63,7 +65,12 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
       return;
     }
     const startWorkspace = startRoot ? workspaceIdentity(startRoot).id : null;
-    const scope = requestedScope && requestedScope !== 'all' ? requestedScope : null;
+    // Launch into the workspace the command was run from. The global index can
+    // contain legitimate history from many projects, but presenting all of it
+    // on first launch makes that history look like bundled/demo content.
+    const scope = requestedScope === 'all'
+      ? null
+      : (requestedScope ?? startWorkspace);
 
     // Self-heal every checkout belonging to the scoped workspace (or all checkouts
     // when viewing all workspaces) from JSONL truth, so separate clones contribute
@@ -211,22 +218,38 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
   });
 
   return new Promise((resolve, reject) => {
-    server.once('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE') {
-        reject(new Error(`Port ${port} is already in use — try \`ultrateam view --port ${port + 1}\`.`));
-      } else {
-        reject(err);
-      }
-    });
-    // Loopback only: the diary is local data and stays local.
-    server.listen(port, '127.0.0.1', () => {
-      const address = server.address();
-      const boundPort = typeof address === 'object' && address ? address.port : port;
-      resolve({
-        url: `http://127.0.0.1:${boundPort}`,
-        port: boundPort,
-        close: () => server.close(),
+    const maxAttempts = opts.portFallback ? 21 : 1;
+    let attempt = 0;
+
+    const listen = (candidatePort: number): void => {
+      const onError = (err: NodeJS.ErrnoException): void => {
+        if (err.code === 'EADDRINUSE' && attempt + 1 < maxAttempts) {
+          attempt += 1;
+          // Port 0 asks the OS for an available ephemeral port. It is only
+          // needed in the unlikely case the requested range reaches 65535.
+          listen(candidatePort >= 65_535 ? 0 : candidatePort + 1);
+          return;
+        }
+        if (err.code === 'EADDRINUSE') {
+          reject(new Error(`Could not find an available viewer port starting at ${port}.`));
+        } else {
+          reject(err);
+        }
+      };
+      server.once('error', onError);
+      // Loopback only: the diary is local data and stays local.
+      server.listen(candidatePort, '127.0.0.1', () => {
+        server.off('error', onError);
+        const address = server.address();
+        const boundPort = typeof address === 'object' && address ? address.port : candidatePort;
+        resolve({
+          url: `http://127.0.0.1:${boundPort}`,
+          port: boundPort,
+          close: () => server.close(),
+        });
       });
-    });
+    };
+
+    listen(port);
   });
 }

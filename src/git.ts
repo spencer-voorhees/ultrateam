@@ -5,7 +5,11 @@ function git(cwd: string, args: string[]): string | null {
   try {
     // Preserve leading spaces: porcelain status uses its first two columns for
     // index/worktree state, including a meaningful leading blank.
-    return execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trimEnd();
+    return execFileSync('git', args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    }).toString().trimEnd();
   } catch {
     return null;
   }
