@@ -778,9 +778,37 @@ html.sidebar-resizing .nav-bar {
   color: var(--text-primary);
 }
 .thread-head:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.thread-head-labels {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.thread-workspace {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px 2px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+  flex: 0 1 auto;
+}
+.thread-workspace svg { color: var(--text-tertiary); flex: 0 0 auto; }
+.thread-workspace span { overflow: hidden; text-overflow: ellipsis; }
 .thread-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -788,6 +816,8 @@ html.sidebar-resizing .nav-bar {
   text-overflow: ellipsis;
   min-width: 0;
 }
+.thread-branch svg { color: var(--text-tertiary); flex: 0 0 auto; }
+.thread-branch span { overflow: hidden; text-overflow: ellipsis; }
 .thread-relay {
   display: flex;
   align-items: center;
@@ -805,19 +835,105 @@ html.sidebar-resizing .nav-bar {
   color: var(--text-tertiary);
   flex: 0 0 auto;
 }
-.thread-chevron { display: inline-flex; transition: transform 0.16s ease; }
+.thread-chevron { display: inline-flex; transition: transform 0.16s ease; flex: 0 0 auto; }
 .thread-group.collapsed .thread-chevron { transform: rotate(-90deg); }
-.thread-body { padding: 0 0.6rem 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.thread-body { padding: 0.35rem 0.85rem 0.6rem; display: flex; flex-direction: column; }
 .thread-group.collapsed .thread-body { display: none; }
-.thread-pass {
+
+/* Thread-as-exchange: avatar rail + connecting line + authored message */
+.thread-msg { display: flex; gap: 0.7rem; align-items: stretch; }
+.thread-msg-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+}
+.thread-msg-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p-color, var(--text-primary));
+  background: color-mix(in srgb, var(--p-color, var(--text-primary)) 13%, var(--card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--p-color, var(--text-primary)) 22%, transparent);
+  flex: 0 0 auto;
+  z-index: 1;
+}
+.thread-msg-line {
+  flex: 1 1 auto;
+  width: 2px;
+  margin: 3px 0;
+  background: linear-gradient(to bottom, var(--border-light), color-mix(in srgb, var(--border) 60%, transparent));
+  border-radius: 2px;
+}
+.thread-msg-last .thread-msg-line { display: none; }
+.thread-msg-content { flex: 1 1 auto; min-width: 0; padding-bottom: 0.75rem; }
+.thread-msg-author {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.4rem;
+  flex-wrap: wrap;
+}
+.thread-msg-name { font-size: 0.82rem; font-weight: 650; color: var(--text-primary); }
+.thread-msg-time { font-size: 0.7rem; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.thread-msg-pass-tag {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--accent, var(--text-secondary));
+  background: color-mix(in srgb, var(--accent, var(--text-secondary)) 12%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+}
+
+/* Expand / collapse-all toolbar */
+.thread-toolbar {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.1rem 0.3rem 0.1rem 0.7rem;
-  font-size: 0.7rem;
-  color: var(--text-tertiary);
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.25rem 0.4rem;
 }
-.thread-pass .agent-icon-badge { width: 15px; height: 15px; }
+.thread-toolbar-count { font-size: 0.72rem; color: var(--text-tertiary); font-weight: 500; }
+.thread-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+}
+.thread-toolbar-btn:hover { color: var(--text-primary); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+
+/* New-entry pulse on a thread head, auto-dismissed */
+.thread-group.thread-has-new > .thread-head { animation: thread-new-flash 2.4s ease-out 1; }
+.thread-new-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent, #3b82f6);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  animation: thread-new-fade 4s ease-out forwards;
+}
+@keyframes thread-new-flash {
+  0% { background: color-mix(in srgb, var(--accent, #3b82f6) 20%, transparent); }
+  100% { background: transparent; }
+}
+@keyframes thread-new-fade {
+  0%, 70% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-2px); }
+}
 
 .views-tabs {
   display: inline-flex;
@@ -1750,6 +1866,9 @@ const state = {
   rawPayload: '',
   seq: 0,
   newEntryIds: new Set(),
+  collapsedThreads: new Set(),
+  freshThreads: new Set(),
+  lastThreadKeys: [],
   feedView: (() => { try { return localStorage.getItem('ut-feed-view') === 'threads' ? 'threads' : 'timeline'; } catch { return 'timeline'; } })(),
 };
 
@@ -1980,9 +2099,11 @@ async function fetchState({ transition = false } = {}) {
     if (raw === state.rawPayload) return;
     const nextData = JSON.parse(raw);
     const previousIds = new Set((state.data?.entries || []).map((entry) => entry.id));
-    state.newEntryIds = state.data && !transition
-      ? new Set((nextData.entries || []).filter((entry) => !previousIds.has(entry.id)).map((entry) => entry.id))
-      : new Set();
+    const arrivals = state.data && !transition
+      ? (nextData.entries || []).filter((entry) => !previousIds.has(entry.id))
+      : [];
+    state.newEntryIds = new Set(arrivals.map((entry) => entry.id));
+    markFreshThreads(arrivals);
     state.rawPayload = raw;
     state.data = nextData;
     if (!state.scope) state.scope = state.data.scope;
@@ -2263,29 +2384,64 @@ function renderFeed(d, { animateStats = false } = {}) {
 
 // Group entries into work threads by branch (the natural line of work), newest
 // thread first, entries within a thread oldest-first so the relay reads top-down.
+// Map every known workspace root to its display name, so a thread can name the
+// workspace it belongs to even in the combined "All" view.
+function buildWorkspaceNameIndex(d) {
+  const byPath = new Map();
+  for (const p of (d.projects || [])) {
+    const roots = (p.roots && p.roots.length) ? p.roots : [p.path];
+    for (const r of roots) if (r) byPath.set(r, p.name);
+  }
+  return byPath;
+}
+
+// A thread is one branch of work inside one workspace. Keying by workspace+branch
+// keeps a "main" in project A distinct from a "main" in project B.
+function threadKey(projectPath, branch) {
+  return `${projectPath || ''}::${branch}`;
+}
+
 function renderThreadedFeed(entries, d) {
+  const names = buildWorkspaceNameIndex(d);
   const groups = new Map();
   for (const e of entries) {
-    const key = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : 'main';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(e);
+    const branch = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : 'main';
+    const key = threadKey(e.projectPath, branch);
+    if (!groups.has(key)) groups.set(key, { branch, projectPath: e.projectPath, workspace: e.project || names.get(e.projectPath) || '', entries: [] });
+    groups.get(key).entries.push(e);
   }
-  const groupArr = [...groups.entries()].map(([branch, es]) => {
-    const sorted = [...es].sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
-    const lastTs = es.reduce((m, e) => ((e.ts || '') > m ? (e.ts || '') : m), '');
+  const groupArr = [...groups.entries()].map(([key, g]) => {
+    const sorted = [...g.entries].sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+    const lastTs = g.entries.reduce((m, e) => ((e.ts || '') > m ? (e.ts || '') : m), '');
     const seen = new Set();
     const relay = [];
     for (const e of sorted) {
       const nm = e.agent && e.agent.name;
       if (nm && !seen.has(agentKey(nm))) { seen.add(agentKey(nm)); relay.push(e.agent); }
     }
-    return { branch, entries: sorted, lastTs, relay };
+    const workspace = g.workspace || names.get(g.projectPath) || '';
+    return { key, branch: g.branch, workspace, entries: sorted, lastTs, relay };
   }).sort((a, b) => b.lastTs.localeCompare(a.lastTs));
-  return groupArr.map((g) => renderThreadGroup(g, d));
+
+  // Remember the current thread keys so "expand/collapse all" can act on them.
+  state.lastThreadKeys = groupArr.map((g) => g.key);
+  const collapsedCount = state.collapsedThreads ? groupArr.filter((g) => state.collapsedThreads.has(g.key)).length : 0;
+  const allCollapsed = groupArr.length > 0 && collapsedCount >= groupArr.length;
+
+  const toolbar = groupArr.length > 1 ? h('div', { class: 'thread-toolbar' },
+    h('span', { class: 'thread-toolbar-count' }, `${groupArr.length} threads`),
+    h('button', { class: 'thread-toolbar-btn', type: 'button', onclick: () => setAllThreads(allCollapsed ? 'expand' : 'collapse') },
+      svgIcon(allCollapsed ? '#icon-chevron' : '#icon-chevron', 12, 12),
+      h('span', {}, allCollapsed ? 'Expand all' : 'Collapse all')
+    )
+  ) : null;
+
+  return [toolbar, ...groupArr.map((g) => renderThreadGroup(g, d))].filter(Boolean);
 }
 
 function renderThreadGroup(g, d) {
-  const collapsed = state.collapsedThreads && state.collapsedThreads.has(g.branch);
+  const collapsed = state.collapsedThreads && state.collapsedThreads.has(g.key);
+  const isFresh = state.freshThreads && state.freshThreads.has(g.key);
   const relayNodes = [];
   g.relay.forEach((agent, i) => {
     const meta = getProviderMeta(agent && agent.name, agent && agent.provider);
@@ -2293,43 +2449,81 @@ function renderThreadGroup(g, d) {
     relayNodes.push(h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};`, title: getAgentDisplayName(agent && agent.name, agent && agent.meta && agent.meta.display, meta) }, svgIcon(meta.icon, 12, 12)));
   });
   const handoffs = g.entries.filter((e) => e.kind === 'handoff').length;
-  const head = h('button', { class: 'thread-head', type: 'button', onclick: () => toggleThread(g.branch) },
+  const head = h('button', { class: 'thread-head', type: 'button', onclick: () => toggleThread(g.key) },
     h('span', { class: 'thread-chevron' }, svgIcon('#icon-chevron', 14, 14)),
-    svgIcon('#icon-branch', 13, 13),
-    h('span', { class: 'thread-branch' }, g.branch),
+    h('span', { class: 'thread-head-labels' },
+      g.workspace ? h('span', { class: 'thread-workspace' }, svgIcon('#icon-folder', 11, 11), h('span', {}, g.workspace)) : null,
+      h('span', { class: 'thread-branch' }, svgIcon('#icon-branch', 12, 12), h('span', {}, g.branch))
+    ),
     h('span', { class: 'thread-relay' }, ...relayNodes),
     h('span', { class: 'thread-meta' },
+      isFresh ? h('span', { class: 'thread-new-badge' }, 'New') : null,
       handoffs > 0 ? h('span', {}, `${handoffs} handoff${handoffs === 1 ? '' : 's'}`) : null,
       h('span', {}, `${g.entries.length} entr${g.entries.length === 1 ? 'y' : 'ies'}`),
       h('span', {}, timeAgo(g.lastTs))
     )
   );
+
+  // Render the thread as an exchange: each entry is a message with the author's
+  // avatar in a connected rail, so a hand-off between agents reads as a reply.
   const body = [];
   let prevKey = null;
-  for (const e of g.entries) {
+  g.entries.forEach((e, idx) => {
+    const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
     const k = agentKey(e.agent && e.agent.name);
-    if (prevKey && k && k !== prevKey) {
-      const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
-      body.push(h('div', { class: 'thread-pass' },
-        h('span', { class: 'thread-relay-arrow' }, '↳'),
-        h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 11, 11)),
-        h('span', {}, `${getAgentDisplayName(e.agent && e.agent.name, e.agent && e.agent.meta && e.agent.meta.display, meta)} picked up`)
-      ));
-    }
-    body.push(renderCard(e, d));
+    const name = getAgentDisplayName(e.agent && e.agent.name, e.agent && e.agent.meta && e.agent.meta.display, meta);
+    const passed = prevKey && k && k !== prevKey;
+    body.push(h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${idx === g.entries.length - 1 ? ' thread-msg-last' : ''}` },
+      h('div', { class: 'thread-msg-rail' },
+        h('span', { class: 'thread-msg-avatar agent-icon-badge', style: `--p-color:${meta.color};`, title: name }, svgIcon(meta.icon, 13, 13)),
+        h('span', { class: 'thread-msg-line' })
+      ),
+      h('div', { class: 'thread-msg-content' },
+        h('div', { class: 'thread-msg-author' },
+          h('span', { class: 'thread-msg-name' }, name),
+          passed ? h('span', { class: 'thread-msg-pass-tag' }, 'picked up the thread') : null,
+          h('span', { class: 'thread-msg-time' }, timeAgo(e.ts))
+        ),
+        renderCard(e, d)
+      )
+    ));
     prevKey = k || prevKey;
-  }
-  return h('div', { class: `thread-group ${collapsed ? 'collapsed' : ''}` },
+  });
+  return h('div', { class: `thread-group ${collapsed ? 'collapsed' : ''}${isFresh ? ' thread-has-new' : ''}` },
     head,
     h('div', { class: 'thread-body' }, ...body)
   );
 }
 
-function toggleThread(branch) {
+function toggleThread(key) {
   if (!state.collapsedThreads) state.collapsedThreads = new Set();
-  if (state.collapsedThreads.has(branch)) state.collapsedThreads.delete(branch);
-  else state.collapsedThreads.add(branch);
+  if (state.collapsedThreads.has(key)) state.collapsedThreads.delete(key);
+  else state.collapsedThreads.add(key);
   render();
+}
+
+function setAllThreads(mode) {
+  if (!state.collapsedThreads) state.collapsedThreads = new Set();
+  const keys = state.lastThreadKeys || [];
+  if (mode === 'collapse') keys.forEach((k) => state.collapsedThreads.add(k));
+  else keys.forEach((k) => state.collapsedThreads.delete(k));
+  render();
+}
+
+// Flag the threads that just received an entry so the head can show a brief
+// "New" marker, then auto-dismiss after a few seconds (app-standard behavior).
+function markFreshThreads(arrivals) {
+  if (!arrivals || !arrivals.length) return;
+  if (!state.freshThreads) state.freshThreads = new Set();
+  for (const e of arrivals) {
+    const branch = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : 'main';
+    state.freshThreads.add(threadKey(e.projectPath, branch));
+  }
+  if (state.freshThreadsTimer) clearTimeout(state.freshThreadsTimer);
+  state.freshThreadsTimer = setTimeout(() => {
+    if (state.freshThreads) state.freshThreads.clear();
+    if (state.feedView === 'threads') render();
+  }, 4200);
 }
 
 function renderCard(entry, d) {
