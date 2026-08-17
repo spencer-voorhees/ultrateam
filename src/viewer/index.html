@@ -495,42 +495,30 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   padding: 1px 8px;
 }
 .usage-card-meta { font-size: 0.72rem; color: var(--text-tertiary); margin-left: auto; }
-.usage-note { font-size: 0.76rem; color: var(--text-tertiary); line-height: 1.4; }
 
-/* daily sparkline */
-.usage-spark {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 34px;
-  margin: 0.55rem 0 0.7rem;
-}
-.usage-spark-bar {
-  flex: 1 1 0;
-  min-width: 2px;
-  background: color-mix(in srgb, var(--p-color, var(--accent, #3b82f6)) 60%, transparent);
-  border-radius: 2px 2px 0 0;
-  min-height: 2px;
-}
-.usage-spark-bar:last-child { background: var(--p-color, var(--accent, #3b82f6)); }
-
-.usage-models { display: flex; flex-direction: column; gap: 0.3rem; }
-.usage-model-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
-  gap: 0.6rem;
-  font-size: 0.76rem;
-}
-.usage-model-name {
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
+/* Contribution share bar + breakdown chips */
+.stats-share {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 0.1rem 0 0.7rem;
 }
-.usage-model-tokens { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
-.usage-model-cost { color: var(--text-secondary); font-variant-numeric: tabular-nums; min-width: 54px; text-align: right; }
+.stats-share-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--p-color, var(--accent, #3b82f6));
+}
+.stats-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.stats-chip {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+}
+.stats-chip b { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .usage-empty { padding: 2rem 0; text-align: center; color: var(--text-tertiary); font-size: 0.82rem; }
 .sidebar-toggle-btn svg {
   width: 16px;
@@ -1070,7 +1058,6 @@ html.sidebar-resizing .nav-bar {
 }
 .thread-msg-name { font-size: 0.82rem; font-weight: 650; color: var(--text-primary); }
 .thread-msg-toggle {
-  margin-left: auto;
   display: inline-flex;
   color: var(--text-tertiary);
   transform: rotate(-90deg);
@@ -1094,13 +1081,14 @@ html.sidebar-resizing .nav-bar {
   transition: border-color 0.14s ease, background 0.14s ease;
 }
 .thread-entry:hover { border-color: var(--border-light); background: var(--card-hover); }
-.thread-entry-kind {
-  display: inline-flex;
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--text-tertiary);
-}
 .thread-entry-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; flex: 1 1 auto; }
+.thread-entry-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.thread-entry-titlerow .kind-pill { flex: 0 0 auto; margin-left: auto; }
 .thread-entry-title {
   font-size: 0.84rem;
   font-weight: 600;
@@ -1108,6 +1096,7 @@ html.sidebar-resizing .nav-bar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 .thread-entry-summary {
   font-size: 0.76rem;
@@ -1988,9 +1977,9 @@ html.sidebar-resizing .nav-bar {
   </div>
 
   <div class="nav-right">
-    <button id="usage-btn" class="nav-btn usage-trigger" title="Token usage across your agents">
+    <button id="usage-btn" class="nav-btn usage-trigger" title="How each agent has contributed">
       <svg viewBox="0 0 24 24" width="14" height="14"><use href="#icon-usage"/></svg>
-      <span>Usage</span>
+      <span>Contributions</span>
     </button>
     <button id="theme-btn" class="nav-btn icon-only" title="Toggle theme">
       <svg viewBox="0 0 24 24" width="13" height="13" id="theme-icon"><use href="#icon-sun"/></svg>
@@ -2007,7 +1996,7 @@ html.sidebar-resizing .nav-bar {
   <div class="usage-drawer-head">
     <div class="usage-drawer-title" id="usage-drawer-title">
       <svg viewBox="0 0 24 24" width="16" height="16"><use href="#icon-usage"/></svg>
-      <span>Token usage</span>
+      <span>Agent contributions</span>
     </div>
     <div class="usage-drawer-actions">
       <button id="usage-refresh" class="usage-icon-btn" title="Refresh">
@@ -2016,7 +2005,7 @@ html.sidebar-resizing .nav-bar {
       <button id="usage-close" class="usage-icon-btn" title="Close" aria-label="Close usage">✕</button>
     </div>
   </div>
-  <p class="usage-drawer-sub">Read on demand from each tool's local logs — no accounts connected.</p>
+  <p class="usage-drawer-sub">What each agent has logged across your workspaces, from the shared memory itself.</p>
   <div class="usage-drawer-body" id="usage-drawer-body"></div>
 </aside>
 
@@ -2261,118 +2250,128 @@ function fullDateTime(iso) {
   }
 }
 
-// ---- Usage drawer ------------------------------------------------------------
-const usageState = { loaded: false, loading: false, report: null };
+// ---- Contributions drawer ---------------------------------------------------
+// Reuses the drawer shell (usage-* ids/classes) but shows each agent's
+// contribution computed from the shared memory itself — reliable for every
+// provider, with no external logs or APIs.
+const statsState = { open: false };
 
-function fmtTokens(n) {
+function fmtNum(n) {
   n = n || 0;
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(n >= 10_000 ? 0 : 1) + 'K';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 10_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
 }
-function fmtUSD(n) {
-  if (n === null || n === undefined) return null;
-  if (n > 0 && n < 0.01) return '<$0.01';
-  return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function tokenTotal(t) { return (t.input || 0) + (t.output || 0) + (t.cacheWrite || 0) + (t.cacheRead || 0); }
 
 function openUsage() {
   const drawer = $('#usage-drawer'), backdrop = $('#usage-backdrop');
   drawer.hidden = false; backdrop.hidden = false;
   requestAnimationFrame(() => { drawer.classList.add('open'); backdrop.classList.add('open'); });
   $('#usage-close').focus();
-  if (!usageState.loaded) fetchUsage();
-  else renderUsage(usageState.report);
+  statsState.open = true;
+  loadStats();
 }
 function closeUsage() {
   const drawer = $('#usage-drawer'), backdrop = $('#usage-backdrop');
   drawer.classList.remove('open'); backdrop.classList.remove('open');
   setTimeout(() => { drawer.hidden = true; backdrop.hidden = true; }, 260);
+  statsState.open = false;
   const btn = $('#usage-btn'); if (btn) btn.focus();
 }
-async function fetchUsage() {
-  if (usageState.loading) return;
-  usageState.loading = true;
+
+// Contributions always reflect ALL workspaces, so prefer the warm "All" snapshot
+// over the scoped view (falling back to current data, then a fetch).
+async function loadStats() {
   const body = $('#usage-drawer-body');
-  setChildren(body, h('div', { class: 'usage-empty' }, 'Reading local logs…'));
+  let entries = null, projectCount = 0;
   try {
-    const res = await fetch('/api/usage');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    usageState.report = await res.json();
-    usageState.loaded = true;
-    renderUsage(usageState.report);
-  } catch (err) {
-    setChildren(body, h('div', { class: 'usage-empty' }, 'Could not read usage: ' + err.message));
-  } finally {
-    usageState.loading = false;
+    const cached = sessionStorage.getItem('ut-state-cache:all');
+    if (cached) { const d = JSON.parse(cached); entries = d.entries || []; projectCount = (d.projects || []).length; }
+  } catch (e) {}
+  if (!entries && state.data && state.scope === 'all') { entries = state.data.entries || []; projectCount = (state.data.projects || []).length; }
+  if (!entries) {
+    setChildren(body, h('div', { class: 'usage-empty' }, 'Gathering contributions…'));
+    try {
+      const d = await (await fetch('/api/state?project=all')).json();
+      entries = d.entries || []; projectCount = (d.projects || []).length;
+    } catch (err) {
+      setChildren(body, h('div', { class: 'usage-empty' }, 'Could not load contributions: ' + err.message));
+      return;
+    }
   }
+  if (!statsState.open) return;
+  renderStats(computeContributions(entries), projectCount);
 }
 
-function renderUsageCard(p) {
-  const meta = getProviderMeta(p.provider, p.provider);
-  const head = h('div', { class: 'usage-card-head' },
-    h('span', { class: 'usage-card-avatar', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 15, 15)),
-    h('span', { class: 'usage-card-name' }, p.label),
-    h('span', { class: 'usage-card-status' },
-      p.available
-        ? `${p.sessions} session${p.sessions === 1 ? '' : 's'}${p.lastActivity ? ' · ' + timeAgo(p.lastActivity) : ''}`
-        : 'no local data')
-  );
-  if (!p.available) {
-    return h('div', { class: 'usage-card unavailable', style: `--p-color:${meta.color};` },
-      head, h('div', { class: 'usage-note' }, p.note || 'No local usage logs found.'));
+function computeContributions(entries) {
+  const agents = new Map();
+  for (const e of entries) {
+    const nm = e.agent && e.agent.name;
+    if (!nm) continue;
+    const key = agentKey(nm);
+    let a = agents.get(key);
+    if (!a) {
+      a = { name: nm, display: (e.meta && e.meta.display) || nm, provider: e.agent && e.agent.provider,
+            entries: 0, handoffs: 0, checkpoints: 0, notes: 0, decisions: 0, openThreads: 0,
+            files: new Set(), workspaces: new Set(), lastTs: '' };
+      agents.set(key, a);
+    }
+    a.entries += 1;
+    if (e.kind === 'handoff') a.handoffs += 1;
+    else if (e.kind === 'session') a.checkpoints += 1;
+    else if (e.kind === 'note') a.notes += 1;
+    a.decisions += (e.decisions && e.decisions.length) || 0;
+    a.openThreads += (e.open_threads && e.open_threads.length) || 0;
+    for (const f of (e.files || [])) a.files.add(f);
+    if (e.project) a.workspaces.add(e.project);
+    if ((e.ts || '') > a.lastTs) a.lastTs = e.ts || '';
+    if (e.meta && e.meta.display) a.display = e.meta.display; // keep the resolved pretty name
   }
-  const cost = fmtUSD(p.cost);
-  const figure = h('div', { class: 'usage-card-figure' },
-    h('span', { class: 'usage-card-tokens' }, fmtTokens(tokenTotal(p.tokens)) + ' tokens'),
-    cost ? h('span', { class: 'usage-card-cost' }, cost + ' est') : null,
-    h('span', { class: 'usage-card-meta' }, `${p.messages} msg${p.messages === 1 ? '' : 's'}`)
-  );
-  // sparkline of the most recent days
-  let spark = null;
-  const days = (p.daily || []).filter((d) => d.date !== 'unknown').slice(-24);
-  if (days.length > 1) {
-    const max = Math.max(...days.map((d) => d.tokens), 1);
-    spark = h('div', { class: 'usage-spark', style: `--p-color:${meta.color};`, title: 'Daily tokens' },
-      ...days.map((d) => h('span', {
-        class: 'usage-spark-bar',
-        style: `height:${Math.max(6, Math.round((d.tokens / max) * 100))}%`,
-        title: `${d.date}: ${fmtTokens(d.tokens)}`,
-      })));
-  }
-  const models = h('div', { class: 'usage-models' },
-    ...(p.models || []).slice(0, 5).map((m) => {
-      const mc = fmtUSD(m.cost);
-      return h('div', { class: 'usage-model-row' },
-        h('span', { class: 'usage-model-name', title: m.model }, m.model),
-        h('span', { class: 'usage-model-tokens' }, fmtTokens(tokenTotal(m.tokens))),
-        h('span', { class: 'usage-model-cost' }, mc || '—')
-      );
-    }));
-  return h('div', { class: 'usage-card', style: `--p-color:${meta.color};` }, head, figure, spark, models);
+  return [...agents.values()].sort((a, b) => b.entries - a.entries);
 }
 
-function renderUsage(report) {
+function renderStats(list, projectCount) {
   const body = $('#usage-drawer-body');
-  if (!report || !report.providers) {
-    setChildren(body, h('div', { class: 'usage-empty' }, 'No usage data.'));
+  if (!list.length) {
+    setChildren(body, h('div', { class: 'usage-empty' }, 'No contributions logged yet.'));
     return;
   }
-  const avail = report.providers.filter((p) => p.available);
-  const grandTokens = avail.reduce((s, p) => s + tokenTotal(p.tokens), 0);
-  const anyCost = avail.some((p) => p.cost !== null);
-  const grandCost = anyCost ? avail.reduce((s, p) => s + (p.cost || 0), 0) : null;
+  const totalEntries = list.reduce((s, a) => s + a.entries, 0);
   const total = h('div', { class: 'usage-total' },
     h('div', {},
-      h('div', { class: 'usage-total-figure' }, fmtTokens(grandTokens)),
-      h('div', { class: 'usage-total-label' }, 'tokens across ' + avail.length + ' tool' + (avail.length === 1 ? '' : 's'))
-    ),
-    grandCost !== null ? h('div', { class: 'usage-total-cost' }, fmtUSD(grandCost) + ' est') : null
+      h('div', { class: 'usage-total-figure' }, fmtNum(totalEntries)),
+      h('div', { class: 'usage-total-label' }, `${list.length} agent${list.length === 1 ? '' : 's'} · ${projectCount} workspace${projectCount === 1 ? '' : 's'}`)
+    )
   );
-  // available first, then the rest
-  const ordered = [...report.providers].sort((a, b) => (b.available - a.available) || (tokenTotal(b.tokens) - tokenTotal(a.tokens)));
-  setChildren(body, total, ...ordered.map(renderUsageCard));
+  setChildren(body, total, ...list.map((a) => renderStatsCard(a, totalEntries)));
+}
+
+function renderStatsCard(a, totalEntries) {
+  const meta = getProviderMeta(a.name, a.provider);
+  const share = totalEntries ? Math.round((a.entries / totalEntries) * 100) : 0;
+  const head = h('div', { class: 'usage-card-head' },
+    h('span', { class: 'usage-card-avatar', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 15, 15)),
+    h('span', { class: 'usage-card-name' }, getAgentDisplayName(a.name, a.display, meta)),
+    h('span', { class: 'usage-card-status' }, a.lastTs ? timeAgo(a.lastTs) : '')
+  );
+  const figure = h('div', { class: 'usage-card-figure' },
+    h('span', { class: 'usage-card-tokens' }, `${fmtNum(a.entries)} entr${a.entries === 1 ? 'y' : 'ies'}`),
+    h('span', { class: 'usage-card-cost' }, share + '%'),
+    h('span', { class: 'usage-card-meta' }, `${a.workspaces.size} workspace${a.workspaces.size === 1 ? '' : 's'}`)
+  );
+  const bar = h('div', { class: 'stats-share' }, h('span', { class: 'stats-share-fill', style: `--p-color:${meta.color};width:${Math.max(3, share)}%` }));
+  const chips = [];
+  const chip = (n, label) => { if (n > 0) chips.push(h('span', { class: 'stats-chip' }, h('b', {}, fmtNum(n)), ' ' + label)); };
+  chip(a.handoffs, a.handoffs === 1 ? 'handoff' : 'handoffs');
+  chip(a.checkpoints, a.checkpoints === 1 ? 'checkpoint' : 'checkpoints');
+  chip(a.notes, a.notes === 1 ? 'note' : 'notes');
+  chip(a.files.size, a.files.size === 1 ? 'file' : 'files');
+  chip(a.decisions, a.decisions === 1 ? 'decision' : 'decisions');
+  chip(a.openThreads, a.openThreads === 1 ? 'open thread' : 'open threads');
+  return h('div', { class: 'usage-card', style: `--p-color:${meta.color};` },
+    head, figure, bar,
+    chips.length ? h('div', { class: 'stats-chips' }, ...chips) : null
+  );
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2903,9 +2902,11 @@ function renderThreadEntryCondensed(e, d) {
   if (e.decisions && e.decisions.length) counts.push(`${e.decisions.length} decision${e.decisions.length === 1 ? '' : 's'}`);
   if (e.open_threads && e.open_threads.length) counts.push(`${e.open_threads.length} open`);
   return h('button', { class: 'thread-entry', type: 'button', onclick: () => toggleThreadEntry(e.id) },
-    h('span', { class: 'thread-entry-kind', title: kind.label }, svgIcon(kind.icon, 11, 11)),
     h('span', { class: 'thread-entry-body' },
-      h('span', { class: 'thread-entry-title' }, e.title || '(untitled)'),
+      h('span', { class: 'thread-entry-titlerow' },
+        h('span', { class: 'thread-entry-title' }, e.title || '(untitled)'),
+        h('span', { class: `kind-pill ${e.kind}` }, svgIcon(kind.icon, 10, 10), h('span', {}, kind.label))
+      ),
       e.summary ? h('span', { class: 'thread-entry-summary' }, e.summary) : null,
       counts.length ? h('span', { class: 'thread-entry-counts' }, counts.join(' · ')) : null
     )
@@ -3373,11 +3374,11 @@ mobileSidebarQuery.addEventListener('change', () => {
 
 $('#theme-btn').addEventListener('click', toggleTheme);
 
-// ---- Usage drawer wiring ----
+// ---- Contributions drawer wiring ----
 $('#usage-btn').addEventListener('click', openUsage);
 $('#usage-close').addEventListener('click', closeUsage);
 $('#usage-backdrop').addEventListener('click', closeUsage);
-$('#usage-refresh').addEventListener('click', () => { usageState.loaded = false; fetchUsage(); });
+$('#usage-refresh').addEventListener('click', () => { warmAllCache().then(loadStats); });
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !$('#usage-drawer').hidden) { ev.preventDefault(); closeUsage(); }
 });

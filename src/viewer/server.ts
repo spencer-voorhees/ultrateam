@@ -10,7 +10,6 @@ import { findProjectRoot, isUltrateamInstallDirectory } from '../store/jsonl.js'
 import { knownRoots, unregisterRoot } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
 import { workspaceIdentity } from '../workspace.js';
-import { collectUsage } from '../usage/collect.js';
 
 export interface ViewerOptions {
   port?: number;
@@ -234,8 +233,6 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
         }, isHead);
       } else if (url.pathname === '/api/state') {
         handleState(index, url, startRoot, res, isHead);
-      } else if (url.pathname === '/api/usage') {
-        json(res, 200, collectUsage(), isHead);
       } else {
         json(res, 404, { error: 'not found' }, isHead);
       }
