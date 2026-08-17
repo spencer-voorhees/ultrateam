@@ -1782,7 +1782,23 @@ async function fetchState({ transition = false } = {}) {
   if (state.scope) params.set('project', state.scope);
   if (state.query) params.set('q', state.query);
   const stream = $('#feed-stream');
-  if (transition && state.data) stream.classList.add('feed-refreshing');
+
+  // Instant switch: if we've viewed this scope before, paint its cached content
+  // immediately and revalidate in the background — no dim, no waiting.
+  let servedFromCache = false;
+  if (transition) {
+    try {
+      const cached = sessionStorage.getItem(`ut-state-cache:${state.scope || 'all'}`);
+      if (cached && cached !== state.rawPayload) {
+        state.rawPayload = cached;
+        state.data = JSON.parse(cached);
+        if (!state.scope) state.scope = state.data.scope;
+        render({ animateStats: false });
+        servedFromCache = true;
+      }
+    } catch (e) {}
+  }
+  if (transition && state.data && !servedFromCache) stream.classList.add('feed-refreshing');
 
   try {
     const res = await fetch('/api/state?' + params.toString());
@@ -1812,7 +1828,9 @@ async function fetchState({ transition = false } = {}) {
     if (!state.data) renderError(err.message);
   } finally {
     isInitialFetch = false;
-    if (transition && currentSeq === state.seq) {
+    // Whichever request is the latest clears the dim, so a background poll
+    // finishing mid-switch can't leave the feed stuck at reduced opacity.
+    if (currentSeq === state.seq) {
       requestAnimationFrame(() => stream.classList.remove('feed-refreshing'));
     }
   }
