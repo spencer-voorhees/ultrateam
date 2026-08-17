@@ -136,6 +136,7 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | `ultrateam show <id>` | One entry in full |
 | `ultrateam log -t <title> -m <summary> [...]` | Manual entry |
 | `ultrateam reindex [--all]` | Rebuild the SQLite index from JSONL |
+| `ultrateam update` | Update to the latest (git pull + rebuild the install) |
 
 ## Status & roadmap
 

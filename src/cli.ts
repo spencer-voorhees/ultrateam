@@ -11,7 +11,8 @@ import { knownRoots, unregisterRoot } from './store/roots.js';
 import { init, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { startViewer } from './viewer/server.js';
-import { execFile } from 'node:child_process';
+import { execFile, execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
 import { rootsInWorkspace } from './workspace.js';
 import { createResumeState, resumableState } from './resume.js';
@@ -276,6 +277,42 @@ program
       console.log(`${root}: ${indexed} indexed${skipped > 0 ? `, ${skipped} corrupt lines skipped` : ''}`);
     }
     index.close();
+  });
+
+program
+  .command('update')
+  .description('Update ultrateam to the latest (git pull + rebuild its install)')
+  .action(() => {
+    // The CLI runs from <install>/dist/cli.js, so the package root is one level up.
+    const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    if (!fs.existsSync(path.join(pkgRoot, '.git'))) {
+      console.error(`ultrateam wasn't installed from a source checkout (${pkgRoot}), so there's nothing to pull.`);
+      console.error('Re-run the installer to update:');
+      console.error('  macOS/Linux  curl -fsSL https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.sh | bash');
+      console.error('  Windows      irm https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.ps1 | iex');
+      process.exit(1);
+    }
+    // npm through the shell so Windows uses npm.cmd (never the policy-gated npm.ps1).
+    const run = (cmd: string) => execSync(cmd, { cwd: pkgRoot, stdio: 'inherit' });
+    const head = () => execSync('git rev-parse --short HEAD', { cwd: pkgRoot }).toString().trim();
+    try {
+      const before = head();
+      console.error(`ultrateam v${VERSION} (${before}) — checking for updates...`);
+      run('git pull --ff-only');
+      const after = head();
+      if (after === before) {
+        console.error('Already up to date.');
+        return;
+      }
+      console.error('→ installing dependencies');
+      run('npm install --no-audit --no-fund');
+      console.error('→ building');
+      run('npm run build');
+      console.error(`Updated ${before} → ${after}. Restart any running agents to pick it up.`);
+    } catch (err) {
+      console.error(`update failed: ${String(err)}`);
+      process.exit(1);
+    }
   });
 
 program.parseAsync().catch((err) => {
