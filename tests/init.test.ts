@@ -19,6 +19,7 @@ test('init creates store, gitignore, AGENTS.md, and all agent configs with --all
 
   assert.ok(fs.existsSync(path.join(root, '.ultrateam')));
   assert.ok(fs.existsSync(path.join(root, 'AGENTS.md')));
+  assert.equal(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8'), '@AGENTS.md\n');
   assert.ok(fs.existsSync(path.join(root, '.gitignore')));
   assert.ok(fs.readFileSync(path.join(root, '.gitignore'), 'utf8').includes('.ultrateam/'));
   assert.deepEqual(knownRoots(rootsPath), [root]);
@@ -52,6 +53,20 @@ test('init creates store, gitignore, AGENTS.md, and all agent configs with --all
   const docReport = doctor(root);
   assert.ok(docReport.some((l) => l.includes('Gemini / Antigravity: registered')));
   assert.ok(docReport.some((l) => l.includes('Codex: registered')));
+});
+
+test('init preserves existing Claude instructions and adds the AGENTS bridge once', () => {
+  const root = tempDir();
+  const rootsPath = path.join(tempDir(), 'projects.json');
+  fs.mkdirSync(path.join(root, '.git'));
+  fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Claude-specific guidance\n\nKeep this content.\n');
+
+  init(root, { all: true, rootsPath });
+  const first = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8');
+  assert.equal(first, '@AGENTS.md\n\n# Claude-specific guidance\n\nKeep this content.\n');
+
+  init(root, { all: true, rootsPath });
+  assert.equal(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8'), first);
 });
 
 test('normalizeAgentName handles gemini, antigravity, and codex', () => {

@@ -19,7 +19,9 @@ ultrateam treats the agents on your machine as what they actually are: **a team*
                             └──►  ~/.ultrateam/index.db                SQLite + FTS5, derived
 ```
 
-Every agent follows the same protocol, installed once into `AGENTS.md` — the cross-agent instruction file they all read:
+Every agent follows the same protocol, maintained once in `AGENTS.md`. `init`
+adds a thin native bridge where a harness requires one; for Claude Code it
+creates `CLAUDE.md` with `@AGENTS.md`, preserving any Claude-specific guidance.
 
 1. **`resume`** when continuing work — restores a provider-neutral execution capsule: objective, progress, next steps, blockers, verification, commands, files, decisions, and Git state.
 2. **`recall`** when historical context is needed — returns ranked relevant entries from *any* agent's past sessions.
