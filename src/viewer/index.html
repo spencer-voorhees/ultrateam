@@ -1106,7 +1106,6 @@ body.sidebar-shelved .sidebar {
   right: 0.4rem;
   z-index: 2;
   background: var(--surface);
-  border: 1px solid var(--border);
 }
 .code-box {
   position: relative;
@@ -1117,10 +1116,21 @@ body.sidebar-shelved .sidebar {
   right: 0.4rem;
   z-index: 2;
   background: var(--surface);
-  border: 1px solid var(--border);
 }
 .code-box .code-container {
   padding-right: 2.6rem;
+}
+/* Thin, styled scrollbar so a scrolling code box has a predictable gutter. */
+.code-container::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.code-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+}
+.code-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 .collapse-icon {
   display: inline-flex;
@@ -1135,6 +1145,15 @@ body.sidebar-shelved .sidebar {
 .card-inline-panel .code-container {
   max-height: 420px;
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+/* Keep the copy button and text clear of the reserved scrollbar gutter so the
+   button never overlaps the scrollbar when the box scrolls (e.g. long JSON). */
+.card-inline-panel .code-box .code-container {
+  padding-right: 3rem;
+}
+.card-inline-panel .code-box .code-copy-btn {
+  right: 0.95rem;
 }
 .card-inline-panel .toggle-block {
   margin-top: 0;
