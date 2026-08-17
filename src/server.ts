@@ -39,7 +39,7 @@ const entryFields = {
     .string()
     .optional()
     .describe('Override the auto-detected agent name (e.g. "claude-code", "cursor")'),
-  model: z.string().optional().describe('Model id doing the work, e.g. "claude-fable-5"'),
+  model: z.string().optional().describe('Always set this to the model id you are running as, e.g. "claude-sonnet-4-6" or "gpt-5.6", so entries are attributed to the right model'),
   objective: z.string().optional().describe('The active user goal, stated independently of any agent'),
   completed: z.array(z.string()).default([]).describe('Concrete work completed so far'),
   next_steps: z.array(z.string()).default([]).describe('Ordered actions the next agent should take'),

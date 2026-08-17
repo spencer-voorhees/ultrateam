@@ -273,7 +273,9 @@ const NUDGE_BODY =
   '## ultrateam shared memory\n' +
   'This machine runs the `ultrateam` MCP server, giving every coding agent one shared memory per project. ' +
   'At the start of a task, call its `recall` tool to load prior context, and use `checkpoint` and `handoff` ' +
-  'to record decisions and hand work off so any agent can resume where another left off.\n';
+  'to record decisions and hand work off so any agent can resume where another left off. ' +
+  'When you call `checkpoint` or `handoff`, always pass your `model` id (e.g. `claude-sonnet-4-6`, `gpt-5.6`) ' +
+  'so the memory attributes each entry to the right model.\n';
 // Marker-wrapped form, appended into files that hold the user's own content too.
 const GLOBAL_NUDGE = `${NUDGE_MARKER}\n${NUDGE_BODY}${NUDGE_END}\n`;
 // Cursor .mdc form: frontmatter with alwaysApply so Agent mode reliably attaches it.
