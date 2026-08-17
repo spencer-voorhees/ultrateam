@@ -31,7 +31,8 @@ if (Test-Path (Join-Path $dir ".git")) {
   git clone --depth 1 --quiet $repo $dir
 }
 
-Set-Location $dir
+Push-Location $dir
+try {
 
 # Run npm through cmd (npm.cmd), never PowerShell's npm.ps1/tsc.ps1 shims — those
 # are script files subject to the execution policy and can fail with "not signed".
@@ -90,9 +91,11 @@ Get-Command ultrateam.ps1 -All -ErrorAction SilentlyContinue | ForEach-Object {
     Remove-Item -Force $_.Source -ErrorAction SilentlyContinue
   }
 }
+} finally {
+  Pop-Location
+}
 
 Say "ultrateam installed. Next: cd your-project; ultrateam init"
 if (-not (Get-Command ultrateam -ErrorAction SilentlyContinue)) {
   Write-Host "  note: reopen your terminal so 'ultrateam' is on PATH" -ForegroundColor Yellow
 }
-

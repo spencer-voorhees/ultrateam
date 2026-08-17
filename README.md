@@ -19,7 +19,9 @@ ultrateam treats the agents on your machine as what they actually are: **a team*
                             └──►  ~/.ultrateam/index.db                SQLite + FTS5, derived
 ```
 
-Every agent follows the same protocol, installed once into `AGENTS.md` — the cross-agent instruction file they all read:
+Every agent follows the same protocol, maintained once in `AGENTS.md`. `init`
+adds a thin native bridge where a harness requires one; for Claude Code it
+creates `CLAUDE.md` with `@AGENTS.md`, preserving any Claude-specific guidance.
 
 1. **`resume`** when continuing work — restores a provider-neutral execution capsule: objective, progress, next steps, blockers, verification, commands, files, decisions, and Git state.
 2. **`recall`** when historical context is needed — returns ranked relevant entries from *any* agent's past sessions.
@@ -72,6 +74,7 @@ ultrateam resume                   # restore the latest session state
 ultrateam resume --id <id> --json # exact, machine-readable resume capsule
 ultrateam show <id>                # one entry in full
 ultrateam log -t "..." -m "..."    # write an entry yourself
+ultrateam uninstall                # remove the app and global state (with confirmation)
 ```
 
 `ultrateam view` starts a reusable background web viewer, opens it, and returns
@@ -143,6 +146,10 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | `ultrateam log -t <title> -m <summary> [...]` | Manual entry |
 | `ultrateam reindex [--all]` | Rebuild the SQLite index from JSONL |
 | `ultrateam update` | Update to the latest (git pull + rebuild the install) |
+| `ultrateam uninstall [--yes]` | Stop the viewer and remove the app, global command, index, state, and logs |
+
+`uninstall` preserves project-local `.ultrateam` histories and project MCP
+configuration. It asks for confirmation unless `--yes` is supplied.
 
 ## Status & roadmap
 

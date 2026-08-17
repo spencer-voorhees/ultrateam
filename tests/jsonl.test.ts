@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createEntry } from '../src/schema.js';
-import { appendEntry, readEntries, findProjectRoot, entriesPath, STORE_DIR } from '../src/store/jsonl.js';
+import {
+  appendEntry,
+  readEntries,
+  findProjectRoot,
+  entriesPath,
+  isUltrateamInstallDirectory,
+  STORE_DIR,
+} from '../src/store/jsonl.js';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-test-'));
@@ -69,4 +76,20 @@ test('findProjectRoot prefers .ultrateam over an outer git root', () => {
   const inner = path.join(outer, 'packages', 'app');
   fs.mkdirSync(path.join(inner, STORE_DIR), { recursive: true });
   assert.equal(findProjectRoot(inner), inner);
+});
+
+test('the ultrateam installation checkout is never a project root', () => {
+  const install = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-app-root-'));
+  fs.mkdirSync(path.join(install, '.git'));
+  fs.mkdirSync(path.join(install, STORE_DIR));
+  const previous = process.env.ULTRATEAM_HOME;
+  process.env.ULTRATEAM_HOME = install;
+  try {
+    assert.equal(isUltrateamInstallDirectory(install), true);
+    assert.equal(findProjectRoot(install), null);
+    assert.throws(() => appendEntry(install, makeEntry('Blocked')), /installation directory/);
+  } finally {
+    if (previous === undefined) delete process.env.ULTRATEAM_HOME;
+    else process.env.ULTRATEAM_HOME = previous;
+  }
 });

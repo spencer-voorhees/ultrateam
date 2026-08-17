@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { startViewer } from '../src/viewer/server.js';
+import { init } from '../src/setup/init.js';
 import {
   processIsAlive,
   readViewerState,
@@ -72,19 +74,22 @@ test('runningViewer clears stale state without signaling an unrelated process', 
   assert.equal(fs.existsSync(file), false);
 });
 
-test('viewer /api/state defaults to all workspaces and supports explicit scoping', async () => {
-  const handle = await startViewer({ port: 0, instanceId: 'scope-test-viewer' });
+test('viewer /api/state defaults to its launch workspace and supports explicit all', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-viewer-scope-'));
+  fs.mkdirSync(path.join(root, '.ultrateam'));
+  const handle = await startViewer({ port: 0, cwd: root, instanceId: 'scope-test-viewer' });
   try {
-    const allState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
-    assert.equal(allState.scope, 'all');
-    assert.ok(Array.isArray(allState.projects));
-    assert.ok(Array.isArray(allState.entries));
+    const launchState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
+    assert.notEqual(launchState.scope, 'all');
+    assert.ok(launchState.projects.some((project: { id: string }) => project.id === launchState.scope));
+    assert.ok(Array.isArray(launchState.entries));
+    assert.equal(launchState.entries.length, 0);
 
     const explicitAllState = await fetch(`${handle.url}/api/state?project=all`).then((r) => r.json());
     assert.equal(explicitAllState.scope, 'all');
 
-    if (allState.projects.length > 0) {
-      const firstProjectId = allState.projects[0].id;
+    if (launchState.projects.length > 0) {
+      const firstProjectId = launchState.projects[0].id;
       const scopedState = await fetch(`${handle.url}/api/state?project=${encodeURIComponent(firstProjectId)}`).then((r) => r.json());
       assert.equal(scopedState.scope, firstProjectId);
     }
@@ -104,3 +109,55 @@ test('viewer /api/state defaults to all workspaces and supports explicit scoping
   }
 });
 
+test('viewer supports first launch before any workspace exists', async () => {
+  const previousHome = process.env.HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-empty-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-empty-cwd-'));
+  process.env.HOME = home;
+  let handle: Awaited<ReturnType<typeof startViewer>> | undefined;
+  try {
+    handle = await startViewer({ port: 0, cwd, instanceId: 'empty-viewer' });
+    const emptyState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
+    assert.equal(emptyState.scope, 'all');
+    assert.deepEqual(emptyState.projects, []);
+    assert.deepEqual(emptyState.entries, []);
+    assert.equal(emptyState.stats.entries, 0);
+
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-new-workspace-'));
+    init(project, { rootsPath: path.join(home, '.ultrateam', 'projects.json') });
+    const initializedState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
+    assert.equal(initializedState.projects.length, 1);
+    assert.equal(initializedState.projects[0].path, project);
+    assert.equal(initializedState.projects[0].name, path.basename(project));
+    assert.equal(initializedState.projects[0].count, 0);
+
+    const html = await fetch(handle.url).then((r) => r.text());
+    assert.ok(html.includes('No workspaces yet'));
+    assert.ok(html.includes('ultrateam init'));
+    assert.ok(!html.includes('then refresh this page'));
+  } finally {
+    handle?.close();
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test('background viewer startup falls back when its preferred port is occupied', async () => {
+  const blocker = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    blocker.once('error', reject);
+    blocker.listen(0, '127.0.0.1', resolve);
+  });
+  const address = blocker.address();
+  assert.ok(address && typeof address === 'object');
+
+  let handle: Awaited<ReturnType<typeof startViewer>> | undefined;
+  try {
+    handle = await startViewer({ port: address.port, portFallback: true });
+    assert.notEqual(handle.port, address.port);
+    assert.equal(await fetch(`${handle.url}/api/health`).then((r) => r.status), 200);
+  } finally {
+    handle?.close();
+    blocker.close();
+  }
+});

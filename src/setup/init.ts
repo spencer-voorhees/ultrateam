@@ -9,8 +9,10 @@ import path from 'node:path';
 import { STORE_DIR, readEntries } from '../store/jsonl.js';
 import { applyContract, CONTRACT_BEGIN } from '../contract.js';
 import { Index } from '../store/db.js';
+import { registerRoot } from '../store/roots.js';
 
 const SERVER_COMMAND = { command: 'ultrateam', args: ['serve'] };
+const CLAUDE_AGENTS_IMPORT = '@AGENTS.md';
 
 interface AgentTarget {
   key: string;
@@ -106,9 +108,26 @@ function writeJson(file: string, value: Record<string, unknown>): void {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', 'utf8');
 }
 
+function ensureClaudeAgentsBridge(root: string): 'created' | 'updated' | 'present' {
+  const file = path.join(root, 'CLAUDE.md');
+  if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink()) return 'present';
+
+  const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  if (existing?.split(/\r?\n/).some((line) => /^@(?:\.\/)?AGENTS\.md\s*$/.test(line.trim()))) {
+    return 'present';
+  }
+  const next = existing === null || existing.length === 0
+    ? `${CLAUDE_AGENTS_IMPORT}\n`
+    : `${CLAUDE_AGENTS_IMPORT}\n\n${existing}`;
+  fs.writeFileSync(file, next, 'utf8');
+  return existing === null ? 'created' : 'updated';
+}
+
 export interface InitOptions {
   /** Configure every known agent, not just detected ones. */
   all?: boolean;
+  /** Override the global workspace registry path (primarily for isolation in tests). */
+  rootsPath?: string;
 }
 
 export function init(root: string, opts: InitOptions = {}): string[] {
@@ -122,6 +141,7 @@ export function init(root: string, opts: InitOptions = {}): string[] {
     fs.mkdirSync(storeDir, { recursive: true });
     report.push(`✓ created ${STORE_DIR}/`);
   }
+  registerRoot(root, opts.rootsPath);
 
   // 2. Keep memory out of git by default; sharing it is an explicit choice.
   const gitignore = path.join(root, '.gitignore');
@@ -150,6 +170,20 @@ export function init(root: string, opts: InitOptions = {}): string[] {
   } else {
     fs.writeFileSync(agentsMd, updated, 'utf8');
     report.push(existing === null ? '✓ created AGENTS.md with the ultrateam contract' : '✓ updated the ultrateam contract in AGENTS.md');
+  }
+
+  // Claude Code officially loads CLAUDE.md rather than AGENTS.md. Keep the
+  // contract canonical in AGENTS.md and add only its supported import bridge.
+  const claudeTarget = AGENT_TARGETS.find((target) => target.key === 'claude-code');
+  if (opts.all || claudeTarget?.detect()) {
+    const bridge = ensureClaudeAgentsBridge(root);
+    report.push(
+      bridge === 'created'
+        ? '✓ created CLAUDE.md bridge to AGENTS.md'
+        : bridge === 'updated'
+          ? '✓ added AGENTS.md import to CLAUDE.md'
+          : '✓ CLAUDE.md already imports AGENTS.md',
+    );
   }
 
   // 4. Per-agent MCP registration (plumbing only — behavior stays identical).

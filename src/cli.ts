@@ -27,6 +27,13 @@ import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
 import { rootsInWorkspace } from './workspace.js';
 import { createResumeState, resumableState } from './resume.js';
+import { createInterface } from 'node:readline/promises';
+import {
+  npmPrefix,
+  scheduleRemoval,
+  uninstallTargets,
+  unlinkGlobalCommand,
+} from './uninstall.js';
 
 const program = new Command();
 
@@ -219,7 +226,11 @@ program
     const mode: ViewerMode = process.env.ULTRATEAM_VIEWER_MODE === 'background'
       ? 'background'
       : 'foreground';
-    const handle = await startViewer({ port: opts.port, instanceId });
+    const handle = await startViewer({
+      port: opts.port,
+      instanceId,
+      portFallback: mode === 'background',
+    });
     const state: ViewerState = {
       version: 1,
       instanceId,
@@ -447,8 +458,8 @@ program
       process.exit(1);
     }
     // npm through the shell so Windows uses npm.cmd (never the policy-gated npm.ps1).
-    const run = (cmd: string) => execSync(cmd, { cwd: pkgRoot, stdio: 'inherit' });
-    const head = () => execSync('git rev-parse --short HEAD', { cwd: pkgRoot }).toString().trim();
+    const run = (cmd: string) => execSync(cmd, { cwd: pkgRoot, stdio: 'inherit', windowsHide: true });
+    const head = () => execSync('git rev-parse --short HEAD', { cwd: pkgRoot, windowsHide: true }).toString().trim();
     try {
       const before = head();
       console.error(`ultrateam v${VERSION} (${before}) — checking for updates...`);
@@ -464,7 +475,7 @@ program
       run('npm run build');
       if (process.platform === 'win32') {
         try {
-          const prefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+          const prefix = execSync('npm config get prefix', { encoding: 'utf8', windowsHide: true }).trim();
           const cliJs = path.join(pkgRoot, 'dist', 'cli.js');
           for (const candidate of [
             path.join(prefix, 'ultrateam.ps1'),
@@ -486,6 +497,49 @@ program
       console.error(`update failed: ${String(err)}`);
       process.exit(1);
     }
+  });
+
+program
+  .command('uninstall')
+  .description('Remove the ultrateam app and global state from this machine')
+  .option('-y, --yes', 'confirm without prompting')
+  .action(async (opts: { yes?: boolean }) => {
+    console.log('This will remove:');
+    console.log('  - the globally linked ultrateam command');
+    console.log('  - the ~/.ultrateam-app installation');
+    console.log('  - ~/.ultrateam global index, viewer state, and logs');
+    console.log('Project .ultrateam histories and project MCP configuration will be preserved.');
+
+    if (!opts.yes) {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        throw new Error('Uninstall confirmation requires an interactive terminal. Re-run with `ultrateam uninstall --yes`.');
+      }
+      const prompt = createInterface({ input: process.stdin, output: process.stdout });
+      let answer = '';
+      try {
+        answer = await prompt.question('Continue? [y/N] ');
+      } finally {
+        prompt.close();
+      }
+      if (!/^y(?:es)?$/i.test(answer.trim())) {
+        console.log('Uninstall cancelled.');
+        return;
+      }
+    }
+
+    const viewer = await runningViewer();
+    if (viewer) await stopViewer(viewer);
+
+    const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const targets = uninstallTargets({
+      packageRoot,
+      npmPrefix: npmPrefix(),
+      appData: process.env.APPDATA,
+      installHome: process.env.ULTRATEAM_HOME,
+    });
+    scheduleRemoval(targets);
+    unlinkGlobalCommand();
+    console.log('ultrateam uninstalled. Cleanup will finish as this command exits.');
   });
 
 program.parseAsync().catch((err) => {

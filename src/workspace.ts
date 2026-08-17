@@ -15,6 +15,7 @@ function git(root: string, args: string[]): string | null {
     const value = execFileSync('git', args, {
       cwd: root,
       stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
     })
       .toString()
       .trim();

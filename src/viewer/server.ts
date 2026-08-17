@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Index, type ScoredEntry } from '../store/db.js';
-import { findProjectRoot } from '../store/jsonl.js';
-import { knownRoots } from '../store/roots.js';
+import { findProjectRoot, isUltrateamInstallDirectory } from '../store/jsonl.js';
+import { knownRoots, unregisterRoot } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
 import { workspaceIdentity } from '../workspace.js';
 
@@ -15,6 +15,8 @@ export interface ViewerOptions {
   port?: number;
   cwd?: string;
   instanceId?: string;
+  /** Try subsequent loopback ports when the preferred port is occupied. */
+  portFallback?: boolean;
 }
 
 export interface ViewerHandle {
@@ -51,7 +53,14 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     // ?project= names a stable logical workspace id. Continue accepting a
     // previously-known root path as a backwards-compatible alias, but never
     // resolve an arbitrary request path (that would become a path oracle).
-    const roots = [...new Set([...knownRoots(), ...(startRoot ? [startRoot] : [])])];
+    const candidateRoots = [...new Set([...knownRoots(), ...(startRoot ? [startRoot] : [])])];
+    for (const root of candidateRoots) {
+      if (!isUltrateamInstallDirectory(root)) continue;
+      index.removeProject(root);
+      unregisterRoot(root);
+      lastIndexed.delete(root);
+    }
+    const roots = candidateRoots.filter((root) => !isUltrateamInstallDirectory(root));
     const rootAliases = new Map(roots.map((root) => [root, workspaceIdentity(root).id]));
     const allowed = new Set<string>(index.projectSummaries().map((p) => p.id));
     for (const id of rootAliases.values()) allowed.add(id);
@@ -63,7 +72,12 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
       return;
     }
     const startWorkspace = startRoot ? workspaceIdentity(startRoot).id : null;
-    const scope = requestedScope && requestedScope !== 'all' ? requestedScope : null;
+    // Launch into the workspace the command was run from. The global index can
+    // contain legitimate history from many projects, but presenting all of it
+    // on first launch makes that history look like bundled/demo content.
+    const scope = requestedScope === 'all'
+      ? null
+      : (requestedScope ?? startWorkspace);
 
     // Self-heal every checkout belonging to the scoped workspace (or all checkouts
     // when viewing all workspaces) from JSONL truth, so separate clones contribute
@@ -82,18 +96,30 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     }
 
     const projects = index.projectSummaries();
-    // A freshly-inited project has zero entries — the client's workspace list
-    // still needs an option for it.
-    if (startWorkspace && !projects.some((p) => p.id === startWorkspace)) {
-      projects.unshift({
-        id: startWorkspace,
-        path: startRoot ?? '',
-        name: startRoot ? path.basename(startRoot) : 'Workspace',
+    // Registered roots are workspace truth even before their first entry.
+    // Group empty clones by stable workspace id just like populated projects.
+    const rootsByWorkspace = new Map<string, string[]>();
+    for (const [root, id] of rootAliases) {
+      const workspaceRoots = rootsByWorkspace.get(id) ?? [];
+      workspaceRoots.push(root);
+      rootsByWorkspace.set(id, workspaceRoots);
+    }
+    for (const project of projects) {
+      project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
+    }
+    for (const [id, workspaceRoots] of rootsByWorkspace) {
+      if (projects.some((project) => project.id === id)) continue;
+      const representative = workspaceRoots[0];
+      projects.push({
+        id,
+        path: representative,
+        name: path.basename(representative),
         count: 0,
         lastTs: '',
-        roots: startRoot ? [startRoot] : [],
+        roots: [...workspaceRoots].sort(),
       });
     }
+    projects.sort((a, b) => b.lastTs.localeCompare(a.lastTs) || a.name.localeCompare(b.name));
     if (scope && !projects.some((p) => p.id === scope)) {
       projects.unshift({
         id: scope,
@@ -211,22 +237,38 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
   });
 
   return new Promise((resolve, reject) => {
-    server.once('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE') {
-        reject(new Error(`Port ${port} is already in use — try \`ultrateam view --port ${port + 1}\`.`));
-      } else {
-        reject(err);
-      }
-    });
-    // Loopback only: memory is local data and stays local.
-    server.listen(port, '127.0.0.1', () => {
-      const address = server.address();
-      const boundPort = typeof address === 'object' && address ? address.port : port;
-      resolve({
-        url: `http://127.0.0.1:${boundPort}`,
-        port: boundPort,
-        close: () => server.close(),
+    const maxAttempts = opts.portFallback ? 21 : 1;
+    let attempt = 0;
+
+    const listen = (candidatePort: number): void => {
+      const onError = (err: NodeJS.ErrnoException): void => {
+        if (err.code === 'EADDRINUSE' && attempt + 1 < maxAttempts) {
+          attempt += 1;
+          // Port 0 asks the OS for an available ephemeral port. It is only
+          // needed in the unlikely case the requested range reaches 65535.
+          listen(candidatePort >= 65_535 ? 0 : candidatePort + 1);
+          return;
+        }
+        if (err.code === 'EADDRINUSE') {
+          reject(new Error(`Could not find an available viewer port starting at ${port}.`));
+        } else {
+          reject(err);
+        }
+      };
+      server.once('error', onError);
+      // Loopback only: memory is local data and stays local.
+      server.listen(candidatePort, '127.0.0.1', () => {
+        server.off('error', onError);
+        const address = server.address();
+        const boundPort = typeof address === 'object' && address ? address.port : candidatePort;
+        resolve({
+          url: `http://127.0.0.1:${boundPort}`,
+          port: boundPort,
+          close: () => server.close(),
+        });
       });
-    });
+    };
+
+    listen(port);
   });
 }
