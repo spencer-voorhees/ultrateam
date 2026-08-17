@@ -262,14 +262,13 @@ const GLOBAL_NUDGE = `${NUDGE_MARKER}\n${NUDGE_BODY}${NUDGE_END}\n`;
 const MDC_NUDGE = `---\ndescription: ultrateam shared memory\nalwaysApply: true\n---\n${NUDGE_BODY}`;
 
 /**
- * Add the short usage nudge to each agent's global instructions. Dedicated files
- * (ours alone: Copilot's ~/.copilot/instructions/ultrateam.md as plain markdown,
- * Cursor's ~/.cursor/rules/ultrateam.mdc as a frontmatter rule) are written
- * whole; shared files (CLAUDE.md/AGENTS.md/GEMINI.md) get the marker-wrapped
- * block appended.
+ * Add the short usage nudge to each agent's global instructions, silently.
+ * Dedicated files (ours alone: Copilot's ~/.copilot/instructions/ultrateam.md as
+ * plain markdown, Cursor's ~/.cursor/rules/ultrateam.mdc as a frontmatter rule)
+ * are written whole; shared files (CLAUDE.md/AGENTS.md/GEMINI.md) get the
+ * marker-wrapped block appended.
  */
-function ensureGlobalNudge(opts: InitOptions): string[] {
-  const report: string[] = [];
+function ensureGlobalNudge(opts: InitOptions): void {
   for (const target of AGENT_TARGETS) {
     if (!target.detect() && !opts.all) continue;
     const file = target.globalInstructionsPath?.();
@@ -277,20 +276,14 @@ function ensureGlobalNudge(opts: InitOptions): string[] {
     if (target.globalInstructionsDedicated) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, target.globalInstructionsMdc ? MDC_NUDGE : NUDGE_BODY, 'utf8');
-      report.push(`✓ ${target.label}: wrote usage nudge to ${tildify(file)}`);
     } else {
       const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-      if (existing.includes(NUDGE_MARKER)) {
-        report.push(`✓ ${target.label}: usage nudge already present in ${tildify(file)}`);
-      } else {
-        const next = existing === '' ? GLOBAL_NUDGE : existing.replace(/\n?$/, '\n\n') + GLOBAL_NUDGE;
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, next, 'utf8');
-        report.push(`✓ ${target.label}: added usage nudge to ${tildify(file)}`);
-      }
+      if (existing.includes(NUDGE_MARKER)) continue;
+      const next = existing === '' ? GLOBAL_NUDGE : existing.replace(/\n?$/, '\n\n') + GLOBAL_NUDGE;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, next, 'utf8');
     }
   }
-  return report;
 }
 
 /**
@@ -334,8 +327,7 @@ export function initGlobal(cliEntry: string, opts: InitOptions = {}): string[] {
 
   report.push('');
   report.push(...ensureGlobalGitignore());
-  report.push('');
-  report.push(...ensureGlobalNudge(opts));
+  ensureGlobalNudge(opts); // writes each agent's global-instructions nudge, silently
   report.push('');
   report.push(`Server launch: ${cmd.command} ${cmd.args.join(' ')}`);
   report.push('Done.');
