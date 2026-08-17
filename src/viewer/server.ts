@@ -44,6 +44,24 @@ function json(res: http.ServerResponse, status: number, body: unknown, headOnly:
 const REINDEX_INTERVAL_MS = 5000;
 const lastIndexed = new Map<string, number>();
 
+// Re-ingest every known checkout from JSONL truth (throttled), so an endpoint
+// that reads the index directly still reflects on-disk history even if it is
+// hit before /api/state has self-healed the roots.
+function reindexKnownRoots(index: Index): void {
+  const now = Date.now();
+  for (const root of knownRoots()) {
+    if (isUltrateamInstallDirectory(root)) continue;
+    if (!fs.existsSync(root)) continue;
+    if (now - (lastIndexed.get(root) ?? 0) <= REINDEX_INTERVAL_MS) continue;
+    lastIndexed.set(root, now);
+    try {
+      index.indexProject(root);
+    } catch {
+      // serve whatever the index already has
+    }
+  }
+}
+
 // workspaceIdentity() spawns several git subprocesses per root; recomputing it
 // for every known root on every /api/state call cost ~200ms. Identity is stable
 // for a repo, so memoize it for the life of the viewer process.
@@ -233,6 +251,13 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
         }, isHead);
       } else if (url.pathname === '/api/state') {
         handleState(index, url, startRoot, res, isHead);
+      } else if (url.pathname === '/api/contributions') {
+        reindexKnownRoots(index);
+        const report = index.contributions();
+        json(res, 200, {
+          workspaces: report.workspaces,
+          agents: report.agents.map((a) => ({ ...a, meta: agentMeta(a.name) })),
+        }, isHead);
       } else {
         json(res, 404, { error: 'not found' }, isHead);
       }

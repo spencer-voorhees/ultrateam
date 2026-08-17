@@ -2282,64 +2282,31 @@ function closeUsage() {
 // over the scoped view (falling back to current data, then a fetch).
 async function loadStats() {
   const body = $('#usage-drawer-body');
-  let entries = null, projectCount = 0;
+  setChildren(body, h('div', { class: 'usage-empty' }, 'Gathering contributions…'));
   try {
-    const cached = sessionStorage.getItem('ut-state-cache:all');
-    if (cached) { const d = JSON.parse(cached); entries = d.entries || []; projectCount = (d.projects || []).length; }
-  } catch (e) {}
-  if (!entries && state.data && state.scope === 'all') { entries = state.data.entries || []; projectCount = (state.data.projects || []).length; }
-  if (!entries) {
-    setChildren(body, h('div', { class: 'usage-empty' }, 'Gathering contributions…'));
-    try {
-      const d = await (await fetch('/api/state?project=all')).json();
-      entries = d.entries || []; projectCount = (d.projects || []).length;
-    } catch (err) {
-      setChildren(body, h('div', { class: 'usage-empty' }, 'Could not load contributions: ' + err.message));
-      return;
-    }
+    // The server aggregates over ALL entries (never the capped feed), so counts
+    // reflect the whole history rather than the recent 200 shown in the feed.
+    const report = await (await fetch('/api/contributions')).json();
+    if (!statsState.open) return;
+    renderStats(report);
+  } catch (err) {
+    setChildren(body, h('div', { class: 'usage-empty' }, 'Could not load contributions: ' + err.message));
   }
-  if (!statsState.open) return;
-  renderStats(computeContributions(entries), projectCount);
 }
 
-function computeContributions(entries) {
-  const agents = new Map();
-  for (const e of entries) {
-    const nm = e.agent && e.agent.name;
-    if (!nm) continue;
-    const key = agentKey(nm);
-    let a = agents.get(key);
-    if (!a) {
-      a = { name: nm, display: (e.meta && e.meta.display) || nm, provider: e.agent && e.agent.provider,
-            entries: 0, handoffs: 0, checkpoints: 0, notes: 0, decisions: 0, openThreads: 0,
-            files: new Set(), workspaces: new Set(), lastTs: '' };
-      agents.set(key, a);
-    }
-    a.entries += 1;
-    if (e.kind === 'handoff') a.handoffs += 1;
-    else if (e.kind === 'session') a.checkpoints += 1;
-    else if (e.kind === 'note') a.notes += 1;
-    a.decisions += (e.decisions && e.decisions.length) || 0;
-    a.openThreads += (e.open_threads && e.open_threads.length) || 0;
-    for (const f of (e.files || [])) a.files.add(f);
-    if (e.project) a.workspaces.add(e.project);
-    if ((e.ts || '') > a.lastTs) a.lastTs = e.ts || '';
-    if (e.meta && e.meta.display) a.display = e.meta.display; // keep the resolved pretty name
-  }
-  return [...agents.values()].sort((a, b) => b.entries - a.entries);
-}
-
-function renderStats(list, projectCount) {
+function renderStats(report) {
   const body = $('#usage-drawer-body');
+  const list = (report && report.agents) || [];
   if (!list.length) {
     setChildren(body, h('div', { class: 'usage-empty' }, 'No contributions logged yet.'));
     return;
   }
-  const totalEntries = list.reduce((s, a) => s + a.entries, 0);
+  const totalEntries = list.reduce((s, a) => s + a.count, 0);
+  const workspaces = report.workspaces || 0;
   const total = h('div', { class: 'usage-total' },
     h('div', {},
       h('div', { class: 'usage-total-figure' }, fmtNum(totalEntries)),
-      h('div', { class: 'usage-total-label' }, `${list.length} agent${list.length === 1 ? '' : 's'} · ${projectCount} workspace${projectCount === 1 ? '' : 's'}`)
+      h('div', { class: 'usage-total-label' }, `${list.length} agent${list.length === 1 ? '' : 's'} · ${workspaces} workspace${workspaces === 1 ? '' : 's'}`)
     )
   );
   setChildren(body, total, ...list.map((a) => renderStatsCard(a, totalEntries)));
@@ -2347,16 +2314,16 @@ function renderStats(list, projectCount) {
 
 function renderStatsCard(a, totalEntries) {
   const meta = getProviderMeta(a.name, a.provider);
-  const share = totalEntries ? Math.round((a.entries / totalEntries) * 100) : 0;
+  const share = totalEntries ? Math.round((a.count / totalEntries) * 100) : 0;
   const head = h('div', { class: 'usage-card-head' },
     h('span', { class: 'usage-card-avatar', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 15, 15)),
-    h('span', { class: 'usage-card-name' }, getAgentDisplayName(a.name, a.display, meta)),
+    h('span', { class: 'usage-card-name' }, getAgentDisplayName(a.name, a.meta && a.meta.display, meta)),
     h('span', { class: 'usage-card-status' }, a.lastTs ? timeAgo(a.lastTs) : '')
   );
   const figure = h('div', { class: 'usage-card-figure' },
-    h('span', { class: 'usage-card-tokens' }, `${fmtNum(a.entries)} entr${a.entries === 1 ? 'y' : 'ies'}`),
+    h('span', { class: 'usage-card-tokens' }, `${fmtNum(a.count)} entr${a.count === 1 ? 'y' : 'ies'}`),
     h('span', { class: 'usage-card-cost' }, share + '%'),
-    h('span', { class: 'usage-card-meta' }, `${a.workspaces.size} workspace${a.workspaces.size === 1 ? '' : 's'}`)
+    h('span', { class: 'usage-card-meta' }, `${a.workspaces} workspace${a.workspaces === 1 ? '' : 's'}`)
   );
   const bar = h('div', { class: 'stats-share' }, h('span', { class: 'stats-share-fill', style: `--p-color:${meta.color};width:${Math.max(3, share)}%` }));
   const chips = [];
@@ -2364,7 +2331,7 @@ function renderStatsCard(a, totalEntries) {
   chip(a.handoffs, a.handoffs === 1 ? 'handoff' : 'handoffs');
   chip(a.checkpoints, a.checkpoints === 1 ? 'checkpoint' : 'checkpoints');
   chip(a.notes, a.notes === 1 ? 'note' : 'notes');
-  chip(a.files.size, a.files.size === 1 ? 'file' : 'files');
+  chip(a.files, a.files === 1 ? 'file' : 'files');
   chip(a.decisions, a.decisions === 1 ? 'decision' : 'decisions');
   chip(a.openThreads, a.openThreads === 1 ? 'open thread' : 'open threads');
   return h('div', { class: 'usage-card', style: `--p-color:${meta.color};` },
@@ -2641,13 +2608,13 @@ function renderRoster(d) {
     return;
   }
 
-  // Per-scope counts from the entries actually loaded for this scope, so the
-  // number next to an agent matches what you see when you filter to it.
+  // Accurate per-scope counts come from the server's agent aggregate
+  // (index.agentSummaries — a SQL COUNT over ALL rows), NOT the capped feed:
+  // the feed only carries the most recent 200 entries, so a workspace outside
+  // that window would otherwise show real entries but zero per-agent counts.
   const scopeCounts = new Map();
-  for (const e of (d.entries || [])) {
-    const k = agentKey(e.agent && e.agent.name);
-    if (!k) continue;
-    scopeCounts.set(k, (scopeCounts.get(k) || 0) + 1);
+  for (const a of (d.agents || [])) {
+    scopeCounts.set(agentKey(a.name), a.count || 0);
   }
 
   const agentItems = union.map((a) => {
@@ -3379,7 +3346,7 @@ $('#theme-btn').addEventListener('click', toggleTheme);
 $('#usage-btn').addEventListener('click', openUsage);
 $('#usage-close').addEventListener('click', closeUsage);
 $('#usage-backdrop').addEventListener('click', closeUsage);
-$('#usage-refresh').addEventListener('click', () => { warmAllCache().then(loadStats); });
+$('#usage-refresh').addEventListener('click', loadStats);
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !$('#usage-drawer').hidden) { ev.preventDefault(); closeUsage(); }
 });

@@ -59,6 +59,20 @@ export interface AgentSummary {
   lastTs: string;
 }
 
+export interface AgentContribution {
+  name: string;
+  provider: string | null;
+  count: number;
+  handoffs: number;
+  checkpoints: number;
+  notes: number;
+  decisions: number;
+  openThreads: number;
+  files: number;
+  workspaces: number;
+  lastTs: string;
+}
+
 interface EntryRow {
   id: string;
   ts: string;
@@ -620,6 +634,72 @@ export class Index {
     return [...byAgent.values()]
       .map(({ _providerTs, _providerId, ...a }) => a)
       .sort((a, b) => b.count - a.count);
+  }
+
+  /**
+   * Full per-agent contribution aggregate across ALL entries (never capped),
+   * so the counts reflect the whole history rather than the recent feed slice.
+   */
+  contributions(projectPath?: string): { agents: AgentContribution[]; workspaces: number } {
+    const workspaceId = resolveWorkspaceScope(projectPath);
+    // GROUP BY id folds the same entry indexed under two checkouts into one.
+    const sql = `SELECT agent_name AS name, provider, kind, project, ts, files, decisions, open_threads
+                 FROM entries ${workspaceId ? 'WHERE workspace_id = ?' : ''}
+                 GROUP BY id`;
+    const rows = (
+      workspaceId ? this.db.prepare(sql).all(workspaceId) : this.db.prepare(sql).all()
+    ) as unknown as Array<{
+      name: string;
+      provider: string | null;
+      kind: string;
+      project: string;
+      ts: string;
+      files: string;
+      decisions: string;
+      open_threads: string;
+    }>;
+    const jsonLen = (s: string): number => {
+      try {
+        const v = JSON.parse(s);
+        return Array.isArray(v) ? v.length : 0;
+      } catch {
+        return 0;
+      }
+    };
+    const byAgent = new Map<
+      string,
+      Omit<AgentContribution, 'files' | 'workspaces'> & { files: Set<string>; workspaces: Set<string> }
+    >();
+    const allWorkspaces = new Set<string>();
+    for (const r of rows) {
+      allWorkspaces.add(r.project);
+      const name = canonicalAgentName(r.name);
+      let a = byAgent.get(name);
+      if (!a) {
+        a = { name, provider: null, count: 0, handoffs: 0, checkpoints: 0, notes: 0,
+              decisions: 0, openThreads: 0, files: new Set(), workspaces: new Set(), lastTs: '' };
+        byAgent.set(name, a);
+      }
+      a.count += 1;
+      if (r.kind === 'handoff') a.handoffs += 1;
+      else if (r.kind === 'session') a.checkpoints += 1;
+      else if (r.kind === 'note') a.notes += 1;
+      a.decisions += jsonLen(r.decisions);
+      a.openThreads += jsonLen(r.open_threads);
+      try {
+        const fs = JSON.parse(r.files);
+        if (Array.isArray(fs)) for (const f of fs) a.files.add(f);
+      } catch {
+        // corrupt row; reindex heals it
+      }
+      a.workspaces.add(r.project);
+      if (r.ts > a.lastTs) a.lastTs = r.ts;
+      if (r.provider && !a.provider) a.provider = r.provider;
+    }
+    const agents = [...byAgent.values()]
+      .map((a) => ({ ...a, files: a.files.size, workspaces: a.workspaces.size }))
+      .sort((a, b) => b.count - a.count);
+    return { agents, workspaces: allWorkspaces.size };
   }
 
   /** Scope-wide truthful counts, independent of any feed cap or ordering. */

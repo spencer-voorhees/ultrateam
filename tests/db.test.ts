@@ -432,3 +432,33 @@ test('latestResume prefers a capsule on the current branch and supports exact id
   assert.equal(index.resumeById(feature.id, { projectPath: '/elsewhere' }), null);
   index.close();
 });
+
+test('contributions aggregates per agent across all entries, uncapped', () => {
+  const index = tempIndex();
+  index.upsert(makeEntry({ project: 'alpha', agent: { name: 'cursor', provider: 'anthropic' }, kind: 'note', files: ['a.ts', 'b.ts'], decisions: ['d1'] }), '/alpha');
+  index.upsert(makeEntry({ project: 'alpha', agent: { name: 'cursor', provider: 'anthropic' }, kind: 'handoff', files: ['b.ts'], open_threads: ['t1', 't2'] }), '/alpha');
+  index.upsert(makeEntry({ project: 'beta', agent: { name: 'codex', provider: 'openai' }, kind: 'session', files: ['x.ts'] }), '/beta');
+
+  const { agents, workspaces } = index.contributions();
+  assert.equal(workspaces, 2);
+  const byName = Object.fromEntries(agents.map((a) => [a.name, a]));
+
+  assert.equal(byName['cursor'].count, 2);
+  assert.equal(byName['cursor'].handoffs, 1);
+  assert.equal(byName['cursor'].notes, 1);
+  assert.equal(byName['cursor'].files, 2, 'unique files a.ts + b.ts');
+  assert.equal(byName['cursor'].decisions, 1);
+  assert.equal(byName['cursor'].openThreads, 2);
+  assert.equal(byName['cursor'].workspaces, 1);
+
+  assert.equal(byName['codex'].count, 1);
+  assert.equal(byName['codex'].checkpoints, 1);
+  assert.equal(byName['codex'].workspaces, 1);
+
+  // Scoped to one workspace returns just that workspace's agents.
+  const scoped = index.contributions('/alpha');
+  assert.equal(scoped.workspaces, 1);
+  assert.equal(scoped.agents.length, 1);
+  assert.equal(scoped.agents[0].name, 'cursor');
+  index.close();
+});
