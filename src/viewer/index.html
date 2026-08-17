@@ -1971,6 +1971,36 @@ function setCount(selector, value, animate = false) {
   el.classList.add('count-updated');
 }
 
+// Case-insensitive key so "cursor" and "Cursor" are the same agent.
+function agentKey(name) { return (name || '').trim().toLowerCase(); }
+
+// The roster is a stable union of every agent with at least one entry across all
+// workspaces (from the "All" snapshot), deduped case-insensitively. Switching a
+// workspace only changes the counts, never adds/removes rows or flips casing.
+function getAllAgentsUnion(d) {
+  let snap = [];
+  try {
+    const allRaw = sessionStorage.getItem('ut-state-cache:all');
+    if (allRaw) { const s = JSON.parse(allRaw); if (Array.isArray(s.agents)) snap = s.agents; }
+  } catch (e) {}
+  const merged = new Map();
+  const add = (a, fromSnapshot) => {
+    const k = agentKey(a.name);
+    if (!k) return;
+    const cur = merged.get(k);
+    if (!cur) {
+      merged.set(k, { key: k, name: a.name, provider: a.meta?.provider || a.provider, order: fromSnapshot ? (a.count || 0) : 0 });
+    } else {
+      if (fromSnapshot) cur.order = a.count || 0;
+      if (!/[A-Z]/.test(cur.name) && /[A-Z]/.test(a.name)) cur.name = a.name; // prefer "Cursor" over "cursor"
+      if (!cur.provider) cur.provider = a.meta?.provider || a.provider;
+    }
+  };
+  for (const a of snap) add(a, true);
+  for (const a of (d.agents || [])) add(a, false); // include any current-scope agent not yet in the snapshot
+  return [...merged.values()].sort((x, y) => y.order - x.order || x.name.localeCompare(y.name));
+}
+
 function renderRoster(d) {
   const list = $('#roster-list');
   const totalEntries = d.stats.entries || 0;
@@ -1993,23 +2023,29 @@ function renderRoster(d) {
     h('span', { class: 'nav-count-pill' }, String(totalEntries))
   );
 
-  if (!d.agents || d.agents.length === 0) {
+  const union = getAllAgentsUnion(d);
+  if (union.length === 0) {
     setChildren(list, h('div', { class: 'nav-empty-state' }, 'No agents yet'));
     return;
   }
 
-  const agentItems = d.agents.map((a) => {
-    const meta = getProviderMeta(a.name, a.meta?.provider || a.provider);
-    const isActive = state.agentFilters.has(a.name);
+  // Per-scope counts, matched case-insensitively (summing any case-variants).
+  const scopeCounts = new Map();
+  for (const a of (d.agents || [])) {
+    const k = agentKey(a.name);
+    scopeCounts.set(k, (scopeCounts.get(k) || 0) + (a.count || 0));
+  }
+
+  const agentItems = union.map((a) => {
+    const meta = getProviderMeta(a.name, a.provider);
+    const isActive = state.agentFilters.has(a.key);
+    const count = scopeCounts.get(a.key) || 0;
     return h('button', {
       class: `agent-item-btn ${isActive ? 'active' : ''}`,
       'aria-pressed': String(isActive),
       onclick: () => {
-        if (state.agentFilters.has(a.name)) {
-          state.agentFilters.delete(a.name);
-        } else {
-          state.agentFilters.add(a.name);
-        }
+        if (state.agentFilters.has(a.key)) state.agentFilters.delete(a.key);
+        else state.agentFilters.add(a.key);
         renderWithFeedTransition();
       },
     },
@@ -2018,10 +2054,10 @@ function renderRoster(d) {
           svgIcon(meta.icon, 13, 13)
         ),
         h('div', { style: 'min-width:0;' },
-          h('div', { class: 'agent-name-text' }, getAgentDisplayName(a.name, a.meta?.display, meta))
+          h('div', { class: 'agent-name-text' }, getAgentDisplayName(a.name, undefined, meta))
         )
       ),
-      h('span', { class: 'nav-count-pill' }, String(a.count))
+      h('span', { class: 'nav-count-pill' }, String(count))
     );
   });
 
@@ -2073,7 +2109,7 @@ function renderFeed(d, { animateStats = false } = {}) {
   else if (state.kindFilter === 'note') entries = entries.filter((e) => e.kind === 'note');
 
   if (state.agentFilters.size > 0) {
-    entries = entries.filter((e) => state.agentFilters.has(e.agent?.name));
+    entries = entries.filter((e) => state.agentFilters.has(agentKey(e.agent?.name)));
   }
 
   const stream = $('#feed-stream');
