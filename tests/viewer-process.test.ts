@@ -108,6 +108,30 @@ test('viewer /api/state defaults to its launch workspace and supports explicit a
   }
 });
 
+test('viewer supports first launch before any workspace exists', async () => {
+  const previousHome = process.env.HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-empty-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-empty-cwd-'));
+  process.env.HOME = home;
+  let handle: Awaited<ReturnType<typeof startViewer>> | undefined;
+  try {
+    handle = await startViewer({ port: 0, cwd, instanceId: 'empty-viewer' });
+    const emptyState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
+    assert.equal(emptyState.scope, 'all');
+    assert.deepEqual(emptyState.projects, []);
+    assert.deepEqual(emptyState.entries, []);
+    assert.equal(emptyState.stats.entries, 0);
+
+    const html = await fetch(handle.url).then((r) => r.text());
+    assert.ok(html.includes('No workspaces yet'));
+    assert.ok(html.includes('ultrateam init'));
+  } finally {
+    handle?.close();
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
 test('background viewer startup falls back when its preferred port is occupied', async () => {
   const blocker = net.createServer();
   await new Promise<void>((resolve, reject) => {

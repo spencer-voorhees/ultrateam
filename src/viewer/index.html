@@ -474,6 +474,11 @@ body.sidebar-shelved .sidebar {
   font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
 }
+.nav-empty-state {
+  padding: 0.35rem 0.55rem;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
 
 /* Agent Roster Item */
 .agent-item-btn {
@@ -1713,9 +1718,11 @@ function render() {
   updateThemeIcon();
   requestAnimationFrame(() => state.newEntryIds.clear());
 
-  const currentProjectName = d.scope === 'all'
-    ? 'All Workspaces'
-    : (d.projects.find((p) => p.id === d.scope)?.name || 'Workspace');
+  const currentProjectName = d.projects.length === 0
+    ? 'No workspaces yet'
+    : d.scope === 'all'
+      ? 'All Workspaces'
+      : (d.projects.find((p) => p.id === d.scope)?.name || 'Workspace');
   $('#page-title-text').textContent = currentProjectName;
   document.title = `ultrateam — ${currentProjectName}`;
 }
@@ -1760,7 +1767,7 @@ function renderRoster(d) {
   );
 
   if (!d.agents || d.agents.length === 0) {
-    setChildren(list, allItem);
+    setChildren(list, h('div', { class: 'nav-empty-state' }, 'No agents yet'));
     return;
   }
 
@@ -1796,6 +1803,10 @@ function renderRoster(d) {
 
 function renderProjectNav(d) {
   const list = $('#project-nav-list');
+  if (!d.projects || d.projects.length === 0) {
+    setChildren(list, h('div', { class: 'nav-empty-state' }, 'No workspaces yet'));
+    return;
+  }
   const items = [
     { id: 'all', name: 'All', count: d.stats.entries },
     ...d.projects,
@@ -1844,6 +1855,17 @@ function renderFeed(d) {
     if (state.query) reasons.push(`search “${state.query}”`);
     if (state.agentFilters.size > 0) reasons.push(`${state.agentFilters.size} selected agent${state.agentFilters.size === 1 ? '' : 's'}`);
     if (state.kindFilter !== 'all') reasons.push(ENTRY_KIND_METADATA[state.kindFilter]?.label.toLowerCase() || state.kindFilter);
+    if (reasons.length === 0 && (!d.projects || d.projects.length === 0)) {
+      setChildren(stream,
+        h('div', { class: 'empty-block' },
+          h('p', { style: 'margin:0;color:var(--text-primary);font-weight:500;' }, 'No workspaces yet'),
+          h('p', { style: 'margin:0.45rem 0 0;font-size:0.82rem;' },
+            'Run ', h('code', {}, 'ultrateam init'), ' inside a project, then refresh this page.'
+          )
+        )
+      );
+      return;
+    }
     const message = reasons.length > 0
       ? `No entries match ${reasons.join(' and ')} in this workspace.`
       : 'No diary entries in this workspace yet.';
