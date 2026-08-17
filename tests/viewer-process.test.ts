@@ -71,3 +71,36 @@ test('runningViewer clears stale state without signaling an unrelated process', 
   assert.equal(await runningViewer(file), null);
   assert.equal(fs.existsSync(file), false);
 });
+
+test('viewer /api/state defaults to all workspaces and supports explicit scoping', async () => {
+  const handle = await startViewer({ port: 0, instanceId: 'scope-test-viewer' });
+  try {
+    const allState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
+    assert.equal(allState.scope, 'all');
+    assert.ok(Array.isArray(allState.projects));
+    assert.ok(Array.isArray(allState.entries));
+
+    const explicitAllState = await fetch(`${handle.url}/api/state?project=all`).then((r) => r.json());
+    assert.equal(explicitAllState.scope, 'all');
+
+    if (allState.projects.length > 0) {
+      const firstProjectId = allState.projects[0].id;
+      const scopedState = await fetch(`${handle.url}/api/state?project=${encodeURIComponent(firstProjectId)}`).then((r) => r.json());
+      assert.equal(scopedState.scope, firstProjectId);
+    }
+
+    const iconRes = await fetch(`${handle.url}/ultrateam-icon.png`);
+    assert.equal(iconRes.status, 200);
+    assert.equal(iconRes.headers.get('content-type'), 'image/png');
+
+    const faviconRes = await fetch(`${handle.url}/favicon.ico`);
+    assert.equal(faviconRes.status, 200);
+    assert.equal(faviconRes.headers.get('content-type'), 'image/png');
+
+    const htmlRes = await fetch(`${handle.url}/`).then((r) => r.text());
+    assert.ok(htmlRes.includes('rel="icon" type="image/png" href="/ultrateam-icon.png"'));
+  } finally {
+    handle.close();
+  }
+});
+

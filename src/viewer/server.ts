@@ -27,13 +27,14 @@ const DEFAULT_PORT = 4272;
 const HTML_PATH = fileURLToPath(new URL('./index.html', import.meta.url));
 const ICON_PATH = fileURLToPath(new URL('./ultrateam-icon.png', import.meta.url));
 
-function json(res: http.ServerResponse, status: number, body: unknown): void {
+function json(res: http.ServerResponse, status: number, body: unknown, headOnly: boolean = false): void {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   });
-  res.end(JSON.stringify(body));
+  if (headOnly) res.end();
+  else res.end(JSON.stringify(body));
 }
 
 // Reindex a given root at most this often — /api/state is a read endpoint and
@@ -41,7 +42,7 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
 const REINDEX_INTERVAL_MS = 5000;
 const lastIndexed = new Map<string, number>();
 
-function handleState(url: URL, startRoot: string | null, res: http.ServerResponse): void {
+function handleState(url: URL, startRoot: string | null, res: http.ServerResponse, headOnly: boolean = false): void {
   const index = new Index();
   try {
     const requested = url.searchParams.get('project');
@@ -58,39 +59,49 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
       ? (rootAliases.get(requested) ?? requested)
       : requested;
     if (requestedScope && requestedScope !== 'all' && !allowed.has(requestedScope)) {
-      json(res, 400, { error: 'unknown project' });
+      json(res, 400, { error: 'unknown project' }, headOnly);
       return;
     }
     const startWorkspace = startRoot ? workspaceIdentity(startRoot).id : null;
-    const scope = requestedScope === 'all' ? null : (requestedScope ?? startWorkspace);
+    const scope = requestedScope && requestedScope !== 'all' ? requestedScope : null;
 
-    // Self-heal every checkout belonging to the scoped workspace from JSONL
-    // truth, so separate clones contribute to one logical history.
+    // Self-heal every checkout belonging to the scoped workspace (or all checkouts
+    // when viewing all workspaces) from JSONL truth, so separate clones contribute
+    // to one logical history.
     const now = Date.now();
-    if (scope) {
-      for (const root of roots) {
-        if (rootAliases.get(root) !== scope || !fs.existsSync(root)) continue;
-        if (now - (lastIndexed.get(root) ?? 0) <= REINDEX_INTERVAL_MS) continue;
-        lastIndexed.set(root, now);
-        try {
-          index.indexProject(root);
-        } catch {
-          // serve whatever the index already has
-        }
+    for (const root of roots) {
+      if (scope && rootAliases.get(root) !== scope) continue;
+      if (!fs.existsSync(root)) continue;
+      if (now - (lastIndexed.get(root) ?? 0) <= REINDEX_INTERVAL_MS) continue;
+      lastIndexed.set(root, now);
+      try {
+        index.indexProject(root);
+      } catch {
+        // serve whatever the index already has
       }
     }
 
     const projects = index.projectSummaries();
-    // A freshly-inited project has a scope but zero entries — the client's
-    // <select> still needs an option for it.
-    if (scope && !projects.some((p) => p.id === scope)) {
+    // A freshly-inited project has zero entries — the client's workspace list
+    // still needs an option for it.
+    if (startWorkspace && !projects.some((p) => p.id === startWorkspace)) {
       projects.unshift({
-        id: scope,
+        id: startWorkspace,
         path: startRoot ?? '',
         name: startRoot ? path.basename(startRoot) : 'Workspace',
         count: 0,
         lastTs: '',
         roots: startRoot ? [startRoot] : [],
+      });
+    }
+    if (scope && !projects.some((p) => p.id === scope)) {
+      projects.unshift({
+        id: scope,
+        path: '',
+        name: 'Workspace',
+        count: 0,
+        lastTs: '',
+        roots: [],
       });
     }
 
@@ -139,7 +150,7 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
         projectPath: r.projectPath,
         meta: agentMeta(r.entry.agent.name),
       })),
-    });
+    }, headOnly);
   } finally {
     index.close();
   }
@@ -160,34 +171,37 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
   const server = http.createServer((req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const isHead = req.method === 'HEAD';
       if (!hostAllowed(req)) {
-        json(res, 403, { error: 'forbidden host' });
-      } else if (req.method !== 'GET') {
-        json(res, 405, { error: 'method not allowed' });
+        json(res, 403, { error: 'forbidden host' }, isHead);
+      } else if (req.method !== 'GET' && req.method !== 'HEAD') {
+        json(res, 405, { error: 'method not allowed' }, isHead);
       } else if (url.pathname === '/') {
         res.writeHead(200, {
           'content-type': 'text/html; charset=utf-8',
           'cache-control': 'no-store',
           'x-content-type-options': 'nosniff',
         });
-        res.end(page);
-      } else if (url.pathname === '/ultrateam-icon.png') {
+        if (isHead) res.end();
+        else res.end(page);
+      } else if (url.pathname === '/ultrateam-icon.png' || url.pathname === '/favicon.ico') {
         res.writeHead(200, {
           'content-type': 'image/png',
           'cache-control': 'no-cache',
           'x-content-type-options': 'nosniff',
         });
-        res.end(icon);
+        if (isHead) res.end();
+        else res.end(icon);
       } else if (url.pathname === '/api/health') {
         json(res, 200, {
           app: 'ultrateam',
           instanceId: opts.instanceId ?? '',
           pid: process.pid,
-        });
+        }, isHead);
       } else if (url.pathname === '/api/state') {
-        handleState(url, startRoot, res);
+        handleState(url, startRoot, res, isHead);
       } else {
-        json(res, 404, { error: 'not found' });
+        json(res, 404, { error: 'not found' }, isHead);
       }
     } catch (err) {
       console.error(`[ultrateam] viewer request failed: ${String(err)}`);
