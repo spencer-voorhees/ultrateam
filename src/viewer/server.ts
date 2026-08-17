@@ -14,10 +14,12 @@ import { workspaceIdentity } from '../workspace.js';
 export interface ViewerOptions {
   port?: number;
   cwd?: string;
+  instanceId?: string;
 }
 
 export interface ViewerHandle {
   url: string;
+  port: number;
   close(): void;
 }
 
@@ -176,6 +178,12 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
           'x-content-type-options': 'nosniff',
         });
         res.end(icon);
+      } else if (url.pathname === '/api/health') {
+        json(res, 200, {
+          app: 'ultrateam',
+          instanceId: opts.instanceId ?? '',
+          pid: process.pid,
+        });
       } else if (url.pathname === '/api/state') {
         handleState(url, startRoot, res);
       } else {
@@ -198,7 +206,13 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
     });
     // Loopback only: the diary is local data and stays local.
     server.listen(port, '127.0.0.1', () => {
-      resolve({ url: `http://127.0.0.1:${port}`, close: () => server.close() });
+      const address = server.address();
+      const boundPort = typeof address === 'object' && address ? address.port : port;
+      resolve({
+        url: `http://127.0.0.1:${boundPort}`,
+        port: boundPort,
+        close: () => server.close(),
+      });
     });
   });
 }

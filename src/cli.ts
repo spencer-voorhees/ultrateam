@@ -11,7 +11,17 @@ import { knownRoots, unregisterRoot } from './store/roots.js';
 import { init, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { startViewer } from './viewer/server.js';
-import { execFile, execSync } from 'node:child_process';
+import {
+  removeViewerState,
+  runningViewer,
+  stopViewer,
+  waitForViewer,
+  writeViewerState,
+  type ViewerMode,
+  type ViewerState,
+} from './viewer/process.js';
+import { execSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
 import { rootsInWorkspace } from './workspace.js';
@@ -48,6 +58,35 @@ function indexWorkspace(index: Index, root: string): void {
   }
 }
 
+function openBrowser(url: string): void {
+  const [cmd, args] =
+    process.platform === 'win32'
+      ? ['cmd', ['/c', 'start', '', url]]
+      : process.platform === 'darwin'
+        ? ['open', [url]]
+        : ['xdg-open', [url]];
+  try {
+    const opener = spawn(cmd as string, args as string[], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    opener.on('error', () => {
+      // The printed URL remains the fallback.
+    });
+    opener.unref();
+  } catch {
+    // The URL is printed either way; a failed auto-open is not an error.
+  }
+}
+
+function printViewerStatus(state: ViewerState): void {
+  console.log(`ultrateam viewer is running in the ${state.mode}`);
+  console.log(`URL:     ${state.url}`);
+  console.log(`PID:     ${state.pid}`);
+  console.log(`Started: ${state.startedAt}`);
+}
+
 program
   .name('ultrateam')
   .description('Shared memory and session handoff for the team of coding agents on your machine')
@@ -78,23 +117,124 @@ program
 
 program
   .command('view')
-  .description('Open the team log in your browser (local web viewer)')
+  .description('Start or reuse the local web viewer')
   .option('-p, --port <n>', 'port to listen on', positiveInt, 4272)
   .option('--no-open', 'do not open the browser automatically')
-  .action(async (opts: { port: number; open: boolean }) => {
-    const { url } = await startViewer({ port: opts.port });
-    console.log(`ultrateam viewer at ${url} (Ctrl+C to stop)`);
-    if (opts.open) {
-      const [cmd, args] =
-        process.platform === 'win32'
-          ? ['cmd', ['/c', 'start', '', url]]
-          : process.platform === 'darwin'
-            ? ['open', [url]]
-            : ['xdg-open', [url]];
-      execFile(cmd as string, args as string[], () => {
-        // the URL is printed either way; a failed auto-open is not an error
+  .option('--foreground', 'run attached to the current terminal')
+  .option('--status', 'show the viewer status')
+  .option('--stop', 'stop the viewer')
+  .action(async (opts: {
+    port: number;
+    open: boolean;
+    foreground?: boolean;
+    status?: boolean;
+    stop?: boolean;
+  }) => {
+    const modeCount = [opts.foreground, opts.status, opts.stop].filter(Boolean).length;
+    if (modeCount > 1) throw new Error('Use only one of --foreground, --status, or --stop.');
+
+    const existing = await runningViewer();
+    if (opts.status) {
+      if (!existing) {
+        console.log('ultrateam viewer is not running.');
+        process.exitCode = 1;
+        return;
+      }
+      printViewerStatus(existing);
+      return;
+    }
+    if (opts.stop) {
+      if (!existing) {
+        console.log('ultrateam viewer is not running.');
+        return;
+      }
+      await stopViewer(existing);
+      console.log(`Stopped ultrateam viewer at ${existing.url}.`);
+      return;
+    }
+
+    if (!opts.foreground) {
+      if (existing) {
+        console.log(`Reusing ultrateam viewer at ${existing.url} (PID ${existing.pid}).`);
+        if (opts.open) openBrowser(existing.url);
+        return;
+      }
+
+      const instanceId = randomUUID();
+      const cliPath = fileURLToPath(import.meta.url);
+      const runtimeArgs = path.extname(cliPath) === '.ts' ? process.execArgv : [];
+      const child = spawn(
+        process.execPath,
+        [...runtimeArgs, cliPath, 'view', '--foreground', '--no-open', '--port', String(opts.port)],
+        {
+          cwd: process.cwd(),
+          detached: true,
+          env: {
+            ...process.env,
+            ULTRATEAM_VIEWER_INSTANCE_ID: instanceId,
+            ULTRATEAM_VIEWER_MODE: 'background',
+          },
+          stdio: 'ignore',
+          windowsHide: true,
+        },
+      );
+      const state = await waitForViewer(instanceId);
+      if (!state) {
+        if (child.pid && child.exitCode === null) {
+          try {
+            process.kill(child.pid, 'SIGTERM');
+          } catch {
+            // It may have already exited after failing to bind.
+          }
+        }
+        throw new Error(`The ultrateam viewer did not start on port ${opts.port}.`);
+      }
+      child.unref();
+      console.log(`Started ultrateam viewer in the background at ${state.url} (PID ${state.pid}).`);
+      if (opts.open) openBrowser(state.url);
+      return;
+    }
+
+    if (existing) {
+      throw new Error(
+        `The ultrateam viewer is already running at ${existing.url} (PID ${existing.pid}). Run \`ultrateam view --stop\` first.`,
+      );
+    }
+
+    const instanceId = process.env.ULTRATEAM_VIEWER_INSTANCE_ID ?? randomUUID();
+    const mode: ViewerMode = process.env.ULTRATEAM_VIEWER_MODE === 'background'
+      ? 'background'
+      : 'foreground';
+    const handle = await startViewer({ port: opts.port, instanceId });
+    const state: ViewerState = {
+      version: 1,
+      instanceId,
+      pid: process.pid,
+      port: handle.port,
+      url: handle.url,
+      mode,
+      cwd: process.cwd(),
+      startedAt: new Date().toISOString(),
+    };
+    writeViewerState(state);
+
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      removeViewerState(instanceId);
+    };
+    process.once('exit', cleanup);
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+      process.once(signal, () => {
+        handle.close();
+        cleanup();
+        process.exit(0);
       });
     }
+
+    console.log(`ultrateam viewer at ${handle.url} (Ctrl+C to stop)`);
+    if (opts.open) openBrowser(handle.url);
   });
 
 program

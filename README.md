@@ -62,7 +62,10 @@ Then just work. Agents checkpoint as they go. When you switch tools:
 ## From the human side
 
 ```bash
-ultrateam view                     # the watch log in your browser
+ultrateam view                     # start/reuse the background viewer and open it
+ultrateam view --foreground        # keep the viewer attached to this terminal
+ultrateam view --status            # show its URL, PID, mode, and start time
+ultrateam view --stop              # stop the viewer
 ultrateam list                     # recent entries: who did what, when
 ultrateam recall auth middleware   # search the shared history
 ultrateam resume                   # restore the latest session state
@@ -71,7 +74,10 @@ ultrateam show <id>                # one entry in full
 ultrateam log -t "..." -m "..."    # write an entry yourself
 ```
 
-`ultrateam view` serves a local web viewer (loopback-only, zero dependencies): the
+`ultrateam view` starts a reusable background web viewer, opens it, and returns
+control to the terminal. Re-running the command reuses the existing process.
+Use `--foreground` for the previous terminal-attached behavior, and `--status`
+or `--stop` to manage the process. The viewer remains loopback-only and zero-dependency: the
 session timeline as a **watch line** colored by the agent on duty, handoff markers,
 a team roster with per-agent counts and models, ranked search, and a 14-day
 activity strip. Dark and light themes, keyboard accessible.
@@ -128,7 +134,7 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | --- | --- |
 | `ultrateam init [--all]` | Set up store, contract, and agent registrations |
 | `ultrateam doctor` | Health check: index, contract, per-agent wiring |
-| `ultrateam view [-p port]` | Local web viewer: timeline, roster, search |
+| `ultrateam view [-p port] [--foreground\|--status\|--stop]` | Start, inspect, or stop the local web viewer |
 | `ultrateam serve` | Run the MCP server (agents launch this; stdio) |
 | `ultrateam resume [query] [--id <id>] [--json]` | Restore portable execution state |
 | `ultrateam recall <query> [-f files] [-a]` | Ranked search of the shared history |
