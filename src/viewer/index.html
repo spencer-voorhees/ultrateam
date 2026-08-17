@@ -2810,7 +2810,11 @@ function renderThreadedFeed(entries, d) {
     const relay = [];
     for (const e of sorted) {
       const nm = e.agent && e.agent.name;
-      if (nm && !seen.has(agentKey(nm))) { seen.add(agentKey(nm)); relay.push(e.agent); }
+      // Carry the entry's resolved pretty display (entry.meta.display) into the relay.
+      if (nm && !seen.has(agentKey(nm))) {
+        seen.add(agentKey(nm));
+        relay.push({ name: nm, provider: e.agent && e.agent.provider, display: e.meta && e.meta.display });
+      }
     }
     const workspace = g.workspace || names.get(g.projectPath) || '';
     return { key, branch: g.branch, workspace, entries: sorted, lastTs, relay };
@@ -2839,7 +2843,7 @@ function renderThreadGroup(g, d) {
   g.relay.forEach((agent, i) => {
     const meta = getProviderMeta(agent && agent.name, agent && agent.provider);
     if (i > 0) relayNodes.push(h('span', { class: 'thread-relay-arrow' }, '→'));
-    relayNodes.push(h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};`, title: getAgentDisplayName(agent && agent.name, agent && agent.meta && agent.meta.display, meta) }, svgIcon(meta.icon, 12, 12)));
+    relayNodes.push(h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};`, title: getAgentDisplayName(agent && agent.name, agent && agent.display, meta) }, svgIcon(meta.icon, 12, 12)));
   });
   const handoffs = g.entries.filter((e) => e.kind === 'handoff').length;
   const head = h('button', { class: 'thread-head', type: 'button', onclick: () => toggleThread(g.key) },
@@ -2864,7 +2868,7 @@ function renderThreadGroup(g, d) {
   g.entries.forEach((e, idx) => {
     const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
     const k = agentKey(e.agent && e.agent.name);
-    const name = getAgentDisplayName(e.agent && e.agent.name, e.agent && e.agent.meta && e.agent.meta.display, meta);
+    const name = getAgentDisplayName(e.agent && e.agent.name, e.meta && e.meta.display, meta);
     const passed = prevKey && k && k !== prevKey;
     const expanded = state.threadExpanded && state.threadExpanded.has(e.id);
     body.push(h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${idx === g.entries.length - 1 ? ' thread-msg-last' : ''}` },
