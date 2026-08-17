@@ -46,8 +46,8 @@ interface AgentTarget {
   globalInstructionsPath?: () => string | null;
   /** The instructions file is ours alone (write/delete whole), not shared with the user's content. */
   globalInstructionsDedicated?: boolean;
-  /** Human-facing location to add the nudge when there is no file-based global rules (e.g. Cursor). */
-  globalInstructionsManual?: string;
+  /** Write the dedicated file as a Cursor .mdc rule (YAML frontmatter with alwaysApply: true). */
+  globalInstructionsMdc?: boolean;
 }
 
 /** VS Code stores user MCP config under its per-OS User directory. */
@@ -97,9 +97,11 @@ export const AGENT_TARGETS: AgentTarget[] = [
     ...mcpServersStyle(),
     globalConfigPath: () => path.join(os.homedir(), '.cursor', 'mcp.json'),
     globalStyle: 'mcpServers',
-    // Cursor's global User Rules are UI-only; file-based ~/.cursor/rules is
-    // unreliable (confirmed by Cursor), so we tell the user where to paste it.
-    globalInstructionsManual: 'Cursor Settings → Rules → User Rules',
+    // Cursor reads global rules from ~/.cursor/rules/*.mdc, but only attaches
+    // them in Agent mode when the frontmatter sets alwaysApply: true.
+    globalInstructionsPath: () => path.join(os.homedir(), '.cursor', 'rules', 'ultrateam.mdc'),
+    globalInstructionsDedicated: true,
+    globalInstructionsMdc: true,
   },
   {
     key: 'copilot',
@@ -256,45 +258,37 @@ const NUDGE_BODY =
   'to record decisions and hand work off so any agent can resume where another left off.\n';
 // Marker-wrapped form, appended into files that hold the user's own content too.
 const GLOBAL_NUDGE = `${NUDGE_MARKER}\n${NUDGE_BODY}${NUDGE_END}\n`;
+// Cursor .mdc form: frontmatter with alwaysApply so Agent mode reliably attaches it.
+const MDC_NUDGE = `---\ndescription: ultrateam shared memory\nalwaysApply: true\n---\n${NUDGE_BODY}`;
 
 /**
  * Add the short usage nudge to each agent's global instructions. Dedicated files
- * (ours alone, e.g. Copilot's ~/.copilot/instructions/ultrateam.md) are written
+ * (ours alone: Copilot's ~/.copilot/instructions/ultrateam.md as plain markdown,
+ * Cursor's ~/.cursor/rules/ultrateam.mdc as a frontmatter rule) are written
  * whole; shared files (CLAUDE.md/AGENTS.md/GEMINI.md) get the marker-wrapped
- * block appended. Agents with no file-based global rules (Cursor) get a manual
- * instruction plus the nudge text to paste.
+ * block appended.
  */
 function ensureGlobalNudge(opts: InitOptions): string[] {
   const report: string[] = [];
-  let manualNeeded = false;
   for (const target of AGENT_TARGETS) {
     if (!target.detect() && !opts.all) continue;
     const file = target.globalInstructionsPath?.();
-    if (file) {
-      if (target.globalInstructionsDedicated) {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, NUDGE_BODY, 'utf8');
-        report.push(`✓ ${target.label}: wrote usage nudge to ${tildify(file)}`);
+    if (!file) continue;
+    if (target.globalInstructionsDedicated) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, target.globalInstructionsMdc ? MDC_NUDGE : NUDGE_BODY, 'utf8');
+      report.push(`✓ ${target.label}: wrote usage nudge to ${tildify(file)}`);
+    } else {
+      const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+      if (existing.includes(NUDGE_MARKER)) {
+        report.push(`✓ ${target.label}: usage nudge already present in ${tildify(file)}`);
       } else {
-        const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-        if (existing.includes(NUDGE_MARKER)) {
-          report.push(`✓ ${target.label}: usage nudge already present in ${tildify(file)}`);
-        } else {
-          const next = existing === '' ? GLOBAL_NUDGE : existing.replace(/\n?$/, '\n\n') + GLOBAL_NUDGE;
-          fs.mkdirSync(path.dirname(file), { recursive: true });
-          fs.writeFileSync(file, next, 'utf8');
-          report.push(`✓ ${target.label}: added usage nudge to ${tildify(file)}`);
-        }
+        const next = existing === '' ? GLOBAL_NUDGE : existing.replace(/\n?$/, '\n\n') + GLOBAL_NUDGE;
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, next, 'utf8');
+        report.push(`✓ ${target.label}: added usage nudge to ${tildify(file)}`);
       }
-    } else if (target.globalInstructionsManual) {
-      manualNeeded = true;
-      report.push(`- ${target.label}: add the nudge in ${target.globalInstructionsManual} (it has no file-based global rules)`);
     }
-  }
-  if (manualNeeded) {
-    report.push('');
-    report.push('Paste this into the agents that need it manually (see above):');
-    for (const line of NUDGE_BODY.trimEnd().split('\n')) report.push(`    ${line}`);
   }
   return report;
 }
