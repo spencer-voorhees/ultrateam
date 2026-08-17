@@ -458,116 +458,46 @@ html.sidebar-resizing .nav-bar {
 }
 
 /* ============================================================
-   Settings Modal
+   Inline workspace rename (pencil edit-in-place)
    ============================================================ */
-.ut-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: flex;
+.workspace-rename-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1.2rem;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(3px);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
-.ut-modal-overlay[hidden] {
+.workspace-rename-btn[hidden] {
   display: none;
 }
-.ut-modal {
-  width: min(520px, 100%);
-  max-height: min(80vh, 640px);
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: var(--shadow-float);
-  overflow: hidden;
+.top-nav-brand:hover .workspace-rename-btn,
+.workspace-rename-btn:focus-visible {
+  opacity: 1;
 }
-.ut-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1rem 1.1rem;
-  border-bottom: 1px solid var(--border);
-}
-.ut-modal-header h2 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 650;
+.workspace-rename-btn:hover {
+  background: var(--surface);
   color: var(--text-primary);
 }
-.ut-modal-body {
-  padding: 1.1rem;
-  overflow-y: auto;
+.workspace-rename-input {
+  min-width: 8ch;
+  max-width: 42vw;
+  background: var(--surface);
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  margin: -0.1rem 0;
+  outline: none;
 }
-.ut-settings-section-label {
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  margin: 0 0 0.2rem;
-}
-.ut-settings-section-hint {
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--text-tertiary);
-  margin: 0 0 0.85rem;
-}
-.ut-ws-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0;
-  border-top: 1px solid var(--border);
-}
-.ut-ws-row-main {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.ut-ws-default {
-  font-size: 0.68rem;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 0.25rem;
-}
-.ut-ws-input {
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.4rem 0.55rem;
-  font-size: 0.82rem;
-  color: var(--text-primary);
-}
-.ut-ws-input:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 1px;
-}
-.ut-ws-reset {
-  flex: 0 0 auto;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.35rem 0.55rem;
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.ut-ws-reset:hover {
-  background: var(--card-hover);
-  color: var(--text-primary);
-}
-.ut-ws-reset:disabled {
-  opacity: 0.4;
-  cursor: default;
+.workspace-rename-input[hidden] {
+  display: none;
 }
 
 .sidebar-header {
@@ -1621,10 +1551,10 @@ html.sidebar-resizing .nav-bar {
     <symbol id="icon-chevron" viewBox="0 0 24 24">
       <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
-    <!-- Settings Gear -->
-    <symbol id="icon-settings" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
-      <path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Pencil / Edit -->
+    <symbol id="icon-pencil" viewBox="0 0 24 24">
+      <path d="M12 20h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
   </defs>
 </svg>
@@ -1644,6 +1574,10 @@ html.sidebar-resizing .nav-bar {
     <div class="app-brand top-nav-brand">
       <img class="ultrateam-logo-icon" src="/ultrateam-icon.png" alt="" aria-hidden="true" draggable="false">
       <span class="ultrateam-logo-text" id="top-workspace">Workspace</span>
+      <input class="ultrateam-logo-text workspace-rename-input" id="workspace-rename-input" type="text" spellcheck="false" autocomplete="off" aria-label="Workspace display name" hidden>
+      <button id="rename-workspace-btn" class="workspace-rename-btn" type="button" title="Rename workspace" aria-label="Rename workspace" hidden>
+        <svg viewBox="0 0 24 24" width="12" height="12"><use href="#icon-pencil"/></svg>
+      </button>
     </div>
   </div>
 
@@ -1657,9 +1591,6 @@ html.sidebar-resizing .nav-bar {
   </div>
 
   <div class="nav-right">
-    <button id="settings-btn" class="nav-btn icon-only" title="Settings" aria-label="Settings" aria-haspopup="dialog">
-      <svg viewBox="0 0 24 24" width="14" height="14"><use href="#icon-settings"/></svg>
-    </button>
     <button id="theme-btn" class="nav-btn icon-only" title="Toggle theme">
       <svg viewBox="0 0 24 24" width="13" height="13" id="theme-icon"><use href="#icon-sun"/></svg>
     </button>
@@ -1770,16 +1701,6 @@ html.sidebar-resizing .nav-bar {
 
 <!-- Toast -->
 <div class="toast-box" id="toast-hud"></div>
-
-<div class="ut-modal-overlay" id="settings-overlay" hidden>
-  <div class="ut-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <div class="ut-modal-header">
-      <h2 id="settings-title">Settings</h2>
-      <button id="settings-close" class="nav-btn icon-only" type="button" aria-label="Close settings" title="Close">✕</button>
-    </div>
-    <div class="ut-modal-body" id="settings-body"></div>
-  </div>
-</div>
 
 <script>
 'use strict';
@@ -2014,14 +1935,7 @@ function render({ animateStats = false } = {}) {
   updateThemeIcon();
   requestAnimationFrame(() => state.newEntryIds.clear());
 
-  const scopedProject = d.projects.find((p) => p.id === d.scope);
-  const currentProjectName = d.projects.length === 0
-    ? 'No workspaces yet'
-    : d.scope === 'all'
-      ? 'All Workspaces'
-      : (scopedProject ? workspaceDisplayName(scopedProject) : 'Workspace');
-  $('#top-workspace').textContent = currentProjectName;
-  document.title = `ultrateam — ${currentProjectName}`;
+  updateWorkspaceHeader(d);
 }
 
 function renderOverview(d, { animateStats = false } = {}) {
@@ -2609,78 +2523,66 @@ try {
   updateSidebarToggle();
 } catch {}
 
-// ---- Settings modal (workspace display names) ----
-const settingsOverlay = $('#settings-overlay');
-const settingsBody = $('#settings-body');
-let lastFocusBeforeSettings = null;
+// ---- Inline workspace rename (pencil, edit in place) ----
+// The header text and pencil are set from render() via updateWorkspaceHeader().
+// Editing commits only on Enter/blur, so nothing re-renders while typing.
+let renamingActive = false;
+const renameBtn = $('#rename-workspace-btn');
+const renameInput = $('#workspace-rename-input');
+const topWorkspace = $('#top-workspace');
 
-function setWorkspaceName(id, name) {
-  const map = getWorkspaceNameOverrides();
-  if (name && name.trim()) map[id] = name.trim();
-  else delete map[id];
-  saveWorkspaceNameOverrides(map);
-  render();
+function updateWorkspaceHeader(d) {
+  const scoped = d.projects.find((p) => p.id === d.scope);
+  const name = d.projects.length === 0
+    ? 'No workspaces yet'
+    : d.scope === 'all'
+      ? 'All Workspaces'
+      : (scoped ? workspaceDisplayName(scoped) : 'Workspace');
+  document.title = `ultrateam — ${name}`;
+  if (renamingActive) return;
+  topWorkspace.textContent = name;
+  const editable = !!scoped && d.scope !== 'all';
+  renameBtn.hidden = !editable;
+  renameBtn.dataset.wsId = editable ? scoped.id : '';
+  renameBtn.dataset.wsDefault = editable ? scoped.name : '';
 }
 
-function renderSettingsBody() {
-  const projects = (state.data && state.data.projects) ? state.data.projects : [];
-  const overrides = getWorkspaceNameOverrides();
-  const nodes = [
-    h('p', { class: 'ut-settings-section-label' }, 'Workspace display names'),
-    h('p', { class: 'ut-settings-section-hint' },
-      'Rename how a workspace appears in this viewer. Saved in this browser only, and never written to the folder or your files.'),
-  ];
-  if (projects.length === 0) {
-    nodes.push(h('div', { class: 'nav-empty-state' }, 'No workspaces yet'));
-  } else {
-    for (const p of projects) {
-      const hasOverride = !!(overrides[p.id] && overrides[p.id].trim());
-      const input = h('input', {
-        type: 'text', class: 'ut-ws-input',
-        value: hasOverride ? overrides[p.id] : '',
-        placeholder: p.name,
-        'aria-label': `Display name for ${p.name}`,
-      });
-      const reset = h('button', {
-        class: 'ut-ws-reset', type: 'button', title: 'Reset to default',
-        disabled: hasOverride ? null : true,
-        onclick: () => { input.value = ''; setWorkspaceName(p.id, ''); reset.disabled = true; },
-      }, 'Reset');
-      input.addEventListener('change', () => {
-        setWorkspaceName(p.id, input.value);
-        reset.disabled = !input.value.trim();
-      });
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
-      nodes.push(h('div', { class: 'ut-ws-row' },
-        h('div', { class: 'ut-ws-row-main' },
-          h('div', { class: 'ut-ws-default' }, p.name),
-          input
-        ),
-        reset
-      ));
-    }
+function beginRenameWorkspace() {
+  if (!renameBtn.dataset.wsId) return;
+  renamingActive = true;
+  renameInput.value = topWorkspace.textContent;
+  topWorkspace.hidden = true;
+  renameBtn.hidden = true;
+  renameInput.hidden = false;
+  renameInput.focus();
+  renameInput.select();
+}
+
+function commitRenameWorkspace(save) {
+  const id = renameBtn.dataset.wsId;
+  if (save && id) {
+    const map = getWorkspaceNameOverrides();
+    const v = renameInput.value.trim();
+    const def = renameBtn.dataset.wsDefault || '';
+    if (v && v !== def) map[id] = v;
+    else delete map[id];
+    saveWorkspaceNameOverrides(map);
   }
-  setChildren(settingsBody, ...nodes);
+  renamingActive = false;
+  renameInput.hidden = true;
+  topWorkspace.hidden = false;
+  if (state.data) {
+    updateWorkspaceHeader(state.data);
+    renderProjectNav(state.data);
+  }
 }
 
-function openSettings() {
-  lastFocusBeforeSettings = document.activeElement;
-  renderSettingsBody();
-  settingsOverlay.hidden = false;
-  const first = settingsBody.querySelector('input');
-  if (first) first.focus();
-}
-function closeSettings() {
-  settingsOverlay.hidden = true;
-  if (lastFocusBeforeSettings && lastFocusBeforeSettings.focus) lastFocusBeforeSettings.focus();
-}
-
-$('#settings-btn').addEventListener('click', openSettings);
-$('#settings-close').addEventListener('click', closeSettings);
-settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !settingsOverlay.hidden) closeSettings();
+renameBtn.addEventListener('click', beginRenameWorkspace);
+renameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); commitRenameWorkspace(true); }
+  else if (e.key === 'Escape') { e.preventDefault(); commitRenameWorkspace(false); }
 });
+renameInput.addEventListener('blur', () => { if (renamingActive) commitRenameWorkspace(true); });
 
 // ---- Sidebar resize ----
 const SIDEBAR_MIN = 200, SIDEBAR_MAX = 480, SIDEBAR_DEFAULT = 260;
