@@ -1108,6 +1108,20 @@ body.sidebar-shelved .sidebar {
   background: var(--surface);
   border: 1px solid var(--border);
 }
+.code-box {
+  position: relative;
+}
+.code-box .code-copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.code-box .code-container {
+  padding-right: 2.6rem;
+}
 .collapse-icon {
   display: inline-flex;
   transform: rotate(180deg);
@@ -2089,11 +2103,21 @@ function renderCardPanel(entry, panel) {
       ? { title: 'Entry details', text: detailsText, copyLabel: 'Copy details' }
       : { title: 'Commands', text: '', copyLabel: '' };
 
-  const content = panel === 'details'
-    ? renderEntryDetails(entry)
+  // JSON is a single text box → copy inside it. Details is formatted sections →
+  // copy at the top-right of the content. Commands render one copyable box each.
+  const content = panel === 'json'
+    ? copyableCode(jsonText, 'Copy JSON')
     : isCommands
       ? renderCommands(entry)
-      : h('pre', { class: 'code-container' }, config.text);
+      : h('div', { class: 'panel-body' },
+          h('button', {
+            class: 'action-pill-btn panel-icon-btn panel-copy-btn',
+            title: config.copyLabel,
+            'aria-label': config.copyLabel,
+            onclick: () => copyText(config.text, `${config.copyLabel.replace('Copy ', '')} copied`),
+          }, svgIcon('#icon-copy', 12, 12)),
+          renderEntryDetails(entry)
+        );
 
   return h('section', { class: 'card-inline-panel', 'data-panel': panel },
     h('div', { class: 'inline-panel-header' },
@@ -2107,16 +2131,20 @@ function renderCardPanel(entry, panel) {
         }, h('span', { class: 'collapse-icon' }, svgIcon('#icon-chevron', 14, 14)))
       )
     ),
-    // Copy lives inside the content card (top-right), not in the panel header.
-    h('div', { class: 'panel-body' },
-      !isCommands ? h('button', {
-        class: 'action-pill-btn panel-icon-btn panel-copy-btn',
-        title: config.copyLabel,
-        'aria-label': config.copyLabel,
-        onclick: () => copyText(config.text, `${config.copyLabel.replace('Copy ', '')} copied`),
-      }, svgIcon('#icon-copy', 12, 12)) : null,
-      content
-    )
+    content
+  );
+}
+
+// A code box with its copy button anchored inside the top-right corner.
+function copyableCode(text, label) {
+  return h('div', { class: 'code-box' },
+    h('button', {
+      class: 'action-pill-btn panel-icon-btn code-copy-btn',
+      title: label,
+      'aria-label': label,
+      onclick: () => copyText(text, `${label.replace('Copy ', '')} copied`),
+    }, svgIcon('#icon-copy', 12, 12)),
+    h('pre', { class: 'code-container' }, text)
   );
 }
 
@@ -2130,15 +2158,9 @@ function renderCommands(entry) {
   return h('div', { class: 'command-list' }, commands.map((command) =>
     h('div', { class: 'command-item' },
       h('div', { class: 'command-item-header' },
-        h('span', { class: 'command-item-label' }, command.label),
-        h('button', {
-          class: 'action-pill-btn panel-icon-btn',
-          title: `Copy ${command.label.toLowerCase()} command`,
-          'aria-label': `Copy ${command.label.toLowerCase()} command`,
-          onclick: () => copyText(command.value, 'Command copied'),
-        }, svgIcon('#icon-copy', 12, 12))
+        h('span', { class: 'command-item-label' }, command.label)
       ),
-      h('pre', { class: 'code-container' }, command.value)
+      copyableCode(command.value, `Copy ${command.label.toLowerCase()} command`)
     )
   ));
 }
