@@ -1845,20 +1845,31 @@ html.sidebar-resizing .nav-bar {
   .sidebar {
     width: min(288px, calc(100vw - 44px));
   }
-  .properties-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
-  }
-  .property-chip,
-  .property-chip:first-child {
-    border-right: 0;
-    padding: 0;
-  }
   .notion-card {
     padding: 1.05rem;
     border-radius: 14px;
   }
+}
+
+/* Below ~680px the header stat strip wraps mid-row and leaves dangling
+   dividers; switch it to a clean 2-column grid with each stat stacked. */
+@media (max-width: 680px) {
+  .properties-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem 1rem;
+  }
+  .property-chip,
+  .property-chip:first-child,
+  .property-chip:last-child {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    border-right: 0;
+    padding: 0;
+  }
+  .property-label { font-size: 0.7rem; }
+  .property-value { font-size: 0.98rem; }
 }
 </style>
 </head>
@@ -2292,9 +2303,26 @@ function closeUsage() {
 
 // Contributions always reflect ALL workspaces, so prefer the warm "All" snapshot
 // over the scoped view (falling back to current data, then a fetch).
+function renderStatsSkeleton() {
+  const bar = (w, ht, mt) => h('div', { class: 'skeleton-bar', style: `width:${w};height:${ht};${mt ? 'margin-top:' + mt + ';' : ''}` });
+  const total = h('div', { class: 'usage-total' },
+    h('div', { style: 'width:100%;' }, bar('42%', '1.5rem'), bar('62%', '0.8rem', '0.55rem'))
+  );
+  const card = () => h('div', { class: 'usage-card' },
+    h('div', { class: 'usage-card-head' },
+      h('div', { class: 'skeleton-bar', style: 'width:28px;height:28px;border-radius:8px;flex:0 0 auto;' }),
+      bar('38%', '0.9rem')
+    ),
+    h('div', { style: 'margin:0.6rem 0;' }, bar('46%', '1.1rem')),
+    h('div', { class: 'stats-share' }, h('span', { class: 'skeleton-bar', style: 'display:block;height:100%;width:55%;' })),
+    h('div', { style: 'display:flex;gap:0.35rem;margin-top:0.1rem;' }, bar('24%', '1rem'), bar('28%', '1rem'), bar('20%', '1rem'))
+  );
+  return [total, card(), card(), card()];
+}
+
 async function loadStats() {
   const body = $('#usage-drawer-body');
-  setChildren(body, h('div', { class: 'usage-empty' }, 'Gathering contributions…'));
+  setChildren(body, ...renderStatsSkeleton());
   try {
     // The server aggregates over ALL entries (never the capped feed), so counts
     // reflect the whole history rather than the recent 200 shown in the feed.
