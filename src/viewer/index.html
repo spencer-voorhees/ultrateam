@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ultrateam — shared agent memory</title>
+<title>ultrateam</title>
 <link rel="icon" type="image/png" href="/ultrateam-icon.png">
 <link rel="apple-touch-icon" href="/ultrateam-icon.png">
 <script>
@@ -1862,7 +1862,7 @@ function render({ animateStats = false } = {}) {
       ? 'All Workspaces'
       : (scoped ? scoped.name : 'Workspace');
   $('#top-workspace').textContent = currentProjectName;
-  document.title = `ultrateam — ${currentProjectName}`;
+  document.title = 'ultrateam';
 }
 
 function renderOverview(d, { animateStats = false } = {}) {
