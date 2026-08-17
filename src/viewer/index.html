@@ -715,7 +715,12 @@ html.sidebar-resizing .nav-bar {
   flex-shrink: 0;
   color: var(--text-secondary);
 }
+/* Keep the folder icon a fixed size in a narrow sidebar; the label truncates. */
+.nav-item-left svg {
+  flex: 0 0 auto;
+}
 .nav-item-label {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
