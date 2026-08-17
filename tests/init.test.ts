@@ -3,70 +3,123 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { init, doctor } from '../src/setup/init.js';
+import { initGlobal, removeGlobalRegistrations, doctor } from '../src/setup/init.js';
 import { canonicalAgentName, normalizeAgentName } from '../src/agents/registry.js';
-import { knownRoots } from '../src/store/roots.js';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-init-'));
 }
 
-test('init creates store, gitignore, AGENTS.md, and all agent configs with --all', () => {
-  const root = tempDir();
-  const rootsPath = path.join(tempDir(), 'projects.json');
-  fs.mkdirSync(path.join(root, '.git'));
-  init(root, { all: true, rootsPath });
+/** Run `fn` with HOME (and git's global config) pointed at an isolated temp home. */
+function withTempHome(fn: (home: string) => void): void {
+  const home = tempDir();
+  const saved = {
+    HOME: process.env.HOME,
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+    GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+  };
+  process.env.HOME = home;
+  process.env.XDG_CONFIG_HOME = path.join(home, '.config');
+  process.env.GIT_CONFIG_GLOBAL = path.join(home, '.gitconfig'); // nonexistent → no core.excludesfile
+  try {
+    fn(home);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
 
-  assert.ok(fs.existsSync(path.join(root, '.ultrateam')));
-  assert.ok(fs.existsSync(path.join(root, 'AGENTS.md')));
-  assert.equal(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8'), '@AGENTS.md\n');
-  assert.ok(fs.existsSync(path.join(root, '.gitignore')));
-  assert.ok(fs.readFileSync(path.join(root, '.gitignore'), 'utf8').includes('.ultrateam/'));
-  assert.deepEqual(knownRoots(rootsPath), [root]);
+test('initGlobal registers the MCP server at the user level with absolute paths and writes nothing to any project', () => {
+  withTempHome((home) => {
+    const project = tempDir();
+    const cliEntry = '/opt/ultrateam/dist/cli.js';
+    initGlobal(cliEntry, { all: true });
 
-  // Check Claude Code (.mcp.json)
-  assert.ok(fs.existsSync(path.join(root, '.mcp.json')));
-  const claudeMcp = JSON.parse(fs.readFileSync(path.join(root, '.mcp.json'), 'utf8'));
-  assert.equal(claudeMcp.mcpServers.ultrateam.command, 'ultrateam');
+    // Claude Code — ~/.claude.json, mcpServers style, absolute node + cli path.
+    const claude = JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8'));
+    assert.equal(claude.mcpServers.ultrateam.command, process.execPath);
+    assert.deepEqual(claude.mcpServers.ultrateam.args, [cliEntry, 'serve']);
 
-  // Check Cursor (.cursor/mcp.json)
-  assert.ok(fs.existsSync(path.join(root, '.cursor', 'mcp.json')));
-  const cursorMcp = JSON.parse(fs.readFileSync(path.join(root, '.cursor', 'mcp.json'), 'utf8'));
-  assert.equal(cursorMcp.mcpServers.ultrateam.command, 'ultrateam');
+    // Cursor — ~/.cursor/mcp.json.
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, '.cursor', 'mcp.json'), 'utf8'));
+    assert.equal(cursor.mcpServers.ultrateam.command, process.execPath);
 
-  // Check VS Code / Copilot (.vscode/mcp.json)
-  assert.ok(fs.existsSync(path.join(root, '.vscode', 'mcp.json')));
-  const vscodeMcp = JSON.parse(fs.readFileSync(path.join(root, '.vscode', 'mcp.json'), 'utf8'));
-  assert.equal(vscodeMcp.servers.ultrateam.command, 'ultrateam');
+    // Gemini — ~/.gemini/settings.json.
+    const gemini = JSON.parse(fs.readFileSync(path.join(home, '.gemini', 'settings.json'), 'utf8'));
+    assert.deepEqual(gemini.mcpServers.ultrateam.args, [cliEntry, 'serve']);
 
-  // Check Gemini / Antigravity (.agents/mcp_config.json)
-  assert.ok(fs.existsSync(path.join(root, '.agents', 'mcp_config.json')));
-  const geminiMcp = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'mcp_config.json'), 'utf8'));
-  assert.equal(geminiMcp.mcpServers.ultrateam.command, 'ultrateam');
+    // Codex — ~/.codex/config.toml, TOML table with absolute command.
+    const codex = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
+    assert.match(codex, /\[mcp_servers\.ultrateam\]/);
+    assert.ok(codex.includes(JSON.stringify(process.execPath)));
 
-  // Check Codex (.codex/mcp.json)
-  assert.ok(fs.existsSync(path.join(root, '.codex', 'mcp.json')));
-  const codexMcp = JSON.parse(fs.readFileSync(path.join(root, '.codex', 'mcp.json'), 'utf8'));
-  assert.equal(codexMcp.mcpServers.ultrateam.command, 'ultrateam');
+    // Global gitignore excludes the store, so it never lands in any repo.
+    const gi = fs.readFileSync(path.join(home, '.config', 'git', 'ignore'), 'utf8');
+    assert.ok(gi.split(/\r?\n/).some((l) => l.trim() === '.ultrateam/'));
 
-  // Doctor check
-  const docReport = doctor(root);
-  assert.ok(docReport.some((l) => l.includes('Gemini / Antigravity: registered')));
-  assert.ok(docReport.some((l) => l.includes('Codex: registered')));
+    // Usage nudge lands in each agent's global instructions where one exists.
+    assert.ok(fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8').includes('ultrateam shared memory'));
+
+    // Nothing was written into the project directory.
+    assert.deepEqual(fs.readdirSync(project), []);
+
+    // doctor reports the global registrations.
+    const doc = doctor(null);
+    assert.ok(doc.some((l) => /Claude Code: registered globally/.test(l)));
+    assert.ok(doc.some((l) => /Codex: registered globally/.test(l)));
+    assert.ok(doc.some((l) => /global gitignore excludes \.ultrateam\//.test(l)));
+  });
 });
 
-test('init preserves existing Claude instructions and adds the AGENTS bridge once', () => {
-  const root = tempDir();
-  const rootsPath = path.join(tempDir(), 'projects.json');
-  fs.mkdirSync(path.join(root, '.git'));
-  fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Claude-specific guidance\n\nKeep this content.\n');
+test('initGlobal is idempotent and reversible', () => {
+  withTempHome((home) => {
+    const cliEntry = '/opt/ultrateam/dist/cli.js';
+    initGlobal(cliEntry, { all: true });
+    const claudeFirst = fs.readFileSync(path.join(home, '.claude.json'), 'utf8');
+    const nudgeFirst = fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8');
 
-  init(root, { all: true, rootsPath });
-  const first = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8');
-  assert.equal(first, '@AGENTS.md\n\n# Claude-specific guidance\n\nKeep this content.\n');
+    // Re-running does not duplicate anything.
+    initGlobal(cliEntry, { all: true });
+    assert.equal(fs.readFileSync(path.join(home, '.claude.json'), 'utf8'), claudeFirst);
+    assert.equal(fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8'), nudgeFirst);
 
-  init(root, { all: true, rootsPath });
-  assert.equal(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8'), first);
+    // Uninstall removes the registration, the gitignore line, and the nudge.
+    removeGlobalRegistrations();
+    const claude = JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8'));
+    assert.ok(!('ultrateam' in (claude.mcpServers ?? {})));
+    assert.ok(!fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8').includes('ultrateam shared memory'));
+    const codex = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
+    assert.ok(!/\[mcp_servers\.ultrateam\]/.test(codex));
+    const gi = fs.readFileSync(path.join(home, '.config', 'git', 'ignore'), 'utf8');
+    assert.ok(!gi.split(/\r?\n/).some((l) => l.trim() === '.ultrateam/'));
+  });
+});
+
+test('initGlobal preserves existing content in user config files', () => {
+  withTempHome((home) => {
+    // A pre-existing global instructions file with the user's own content.
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.claude', 'CLAUDE.md'), '# My global rules\n\nKeep this.\n');
+    // A pre-existing Cursor config with another server.
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, '.cursor', 'mcp.json'),
+      JSON.stringify({ mcpServers: { other: { command: 'other' } } }, null, 2),
+    );
+
+    initGlobal('/opt/ultrateam/dist/cli.js', { all: true });
+
+    const md = fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8');
+    assert.ok(md.includes('# My global rules'));
+    assert.ok(md.includes('Keep this.'));
+    assert.ok(md.includes('ultrateam shared memory'));
+
+    const cursor = JSON.parse(fs.readFileSync(path.join(home, '.cursor', 'mcp.json'), 'utf8'));
+    assert.equal(cursor.mcpServers.other.command, 'other'); // untouched
+    assert.equal(cursor.mcpServers.ultrateam.command, process.execPath); // added
+  });
 });
 
 test('normalizeAgentName handles gemini, antigravity, and codex', () => {

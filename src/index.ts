@@ -18,7 +18,7 @@ export type { RecallOptions, ScoredEntry } from './store/db.js';
 export { AGENTS, agentMeta, normalizeAgentName, canonicalAgentName, inferProvider } from './agents/registry.js';
 export { formatEntry, agentLabel, timeAgo } from './format.js';
 export { CONTRACT, applyContract } from './contract.js';
-export { init, doctor } from './setup/init.js';
+export { initGlobal, doctor } from './setup/init.js';
 export { startServer } from './server.js';
 export { startViewer } from './viewer/server.js';
 export { VERSION } from './version.js';

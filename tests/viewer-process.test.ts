@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { startViewer } from '../src/viewer/server.js';
-import { init } from '../src/setup/init.js';
+import { registerRoot } from '../src/store/roots.js';
+import { STORE_DIR } from '../src/store/jsonl.js';
 import {
   processIsAlive,
   readViewerState,
@@ -124,7 +125,8 @@ test('viewer supports first launch before any workspace exists', async () => {
     assert.equal(emptyState.stats.entries, 0);
 
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-new-workspace-'));
-    init(project, { rootsPath: path.join(home, '.ultrateam', 'projects.json') });
+    fs.mkdirSync(path.join(project, STORE_DIR), { recursive: true });
+    registerRoot(project, path.join(home, '.ultrateam', 'projects.json'));
     const initializedState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
     assert.equal(initializedState.projects.length, 1);
     assert.equal(initializedState.projects[0].path, project);

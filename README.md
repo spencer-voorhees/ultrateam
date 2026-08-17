@@ -19,9 +19,9 @@ ultrateam treats the agents on your machine as what they actually are: **a team*
                             └──►  ~/.ultrateam/index.db                SQLite + FTS5, derived
 ```
 
-Every agent follows the same protocol, maintained once in `AGENTS.md`. `init`
-adds a thin native bridge where a harness requires one; for Claude Code it
-creates `CLAUDE.md` with `@AGENTS.md`, preserving any Claude-specific guidance.
+Every agent follows the same protocol through the one MCP server. `init` wires
+that server into each agent **globally** and adds a short usage nudge to each
+agent's global instructions — it writes nothing into your repositories.
 
 1. **`resume`** when continuing work — restores a provider-neutral execution capsule: objective, progress, next steps, blockers, verification, commands, files, decisions, and Git state.
 2. **`recall`** when historical context is needed — returns ranked relevant entries from *any* agent's past sessions.
@@ -44,16 +44,15 @@ curl -fsSL https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/ins
 irm https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.ps1 | iex
 ```
 
-Then, in any project:
+Then, once per machine (run it from anywhere):
 ```bash
-cd your-project
-ultrateam init               # store + AGENTS.md contract + MCP registration
+ultrateam init               # register the MCP server for every detected agent, globally
 ultrateam doctor             # verify every detected agent is wired
 ```
 
 Prefer a manual setup? Clone the repo, then `npm install && npm run build && npm link`.
 
-`init` detects which agents are installed and registers the server in each one's project config (`.mcp.json` for Claude Code, `.cursor/mcp.json` for Cursor, `.vscode/mcp.json` for VS Code/Copilot, `.agents/mcp_config.json` for Gemini/Antigravity, `.codex/mcp.json` for Codex). That registration is the only per-agent plumbing; everything else is identical everywhere.
+`init` is **global**: it detects which agents are installed and registers the server in each one's *user-level* config (`~/.claude.json`, `~/.cursor/mcp.json`, VS Code's user `mcp.json`, `~/.gemini/settings.json`, `~/.codex/config.toml`), pinning the absolute `node` + CLI path so a GUI app never fails on `PATH` or Node version. It writes **nothing** into any project — running it produces no git diff — and it adds `.ultrateam/` to your global gitignore so the per-project store (created lazily on first use) never lands in a repo. Re-run `init` anytime; it's idempotent, and `ultrateam uninstall` reverses all of it.
 
 Then just work. Agents checkpoint as they go. When you switch tools:
 
@@ -135,8 +134,8 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 
 | Command | What it does |
 | --- | --- |
-| `ultrateam init [--all]` | Set up store, contract, and agent registrations |
-| `ultrateam doctor` | Health check: index, contract, per-agent wiring |
+| `ultrateam init [--all]` | Register the MCP server globally for every detected agent (nothing written to repos) |
+| `ultrateam doctor` | Health check: index, global gitignore, per-agent wiring |
 | `ultrateam view [-p port] [--foreground\|--status\|--stop]` | Start, inspect, or stop the local web viewer |
 | `ultrateam serve` | Run the MCP server (agents launch this; stdio) |
 | `ultrateam resume [query] [--id <id>] [--json]` | Restore portable execution state |
@@ -146,10 +145,10 @@ Why not SQLite alone? Because the lowest common denominator wins on agent-agnost
 | `ultrateam log -t <title> -m <summary> [...]` | Manual entry |
 | `ultrateam reindex [--all]` | Rebuild the SQLite index from JSONL |
 | `ultrateam update` | Update to the latest (git pull + rebuild the install) |
-| `ultrateam uninstall [--yes]` | Stop the viewer and remove the app, global command, index, state, and logs |
+| `ultrateam uninstall [--yes]` | Stop the viewer, remove the global MCP registrations, gitignore entry, nudges, app, command, index, state, and logs |
 
-`uninstall` preserves project-local `.ultrateam` histories and project MCP
-configuration. It asks for confirmation unless `--yes` is supplied.
+`uninstall` preserves project-local `.ultrateam/` histories (your actual
+memory). It asks for confirmation unless `--yes` is supplied.
 
 ## Status & roadmap
 

@@ -8,7 +8,7 @@ import { Index } from './store/db.js';
 import { currentBranch } from './git.js';
 import { formatEntry, formatResume, agentLabel, timeAgo } from './format.js';
 import { knownRoots, unregisterRoot } from './store/roots.js';
-import { init, doctor } from './setup/init.js';
+import { initGlobal, removeGlobalRegistrations, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { startViewer } from './viewer/server.js';
 import {
@@ -102,11 +102,11 @@ program
 
 program
   .command('init')
-  .description('Set up this project: .ultrateam/ store, AGENTS.md contract, MCP registration for detected agents')
+  .description('Set up ultrateam globally for every detected agent (writes nothing into your repos)')
   .option('--all', 'configure every supported agent, not just detected ones')
   .action((opts: { all?: boolean }) => {
-    const root = findProjectRoot(process.cwd()) ?? process.cwd();
-    for (const line of init(root, { all: opts.all })) console.log(line);
+    const cliEntry = fileURLToPath(import.meta.url);
+    for (const line of initGlobal(cliEntry, { all: opts.all })) console.log(line);
   });
 
 program
@@ -527,7 +527,8 @@ program
     console.log('  - the globally linked ultrateam command');
     console.log('  - the ~/.ultrateam-app installation');
     console.log('  - ~/.ultrateam global index, viewer state, and logs');
-    console.log('Project .ultrateam histories and project MCP configuration will be preserved.');
+    console.log('  - the ultrateam MCP registration from each agent, the global gitignore entry, and usage nudges');
+    console.log('Project .ultrateam/ histories are preserved.');
 
     if (!opts.yes) {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -548,6 +549,8 @@ program
 
     const viewer = await runningViewer();
     if (viewer) await stopViewer(viewer);
+
+    for (const line of removeGlobalRegistrations()) console.log(line);
 
     const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const targets = uninstallTargets({
