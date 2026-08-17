@@ -96,18 +96,30 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     }
 
     const projects = index.projectSummaries();
-    // A freshly-inited project has zero entries — the client's workspace list
-    // still needs an option for it.
-    if (startWorkspace && !projects.some((p) => p.id === startWorkspace)) {
-      projects.unshift({
-        id: startWorkspace,
-        path: startRoot ?? '',
-        name: startRoot ? path.basename(startRoot) : 'Workspace',
+    // Registered roots are workspace truth even before their first entry.
+    // Group empty clones by stable workspace id just like populated projects.
+    const rootsByWorkspace = new Map<string, string[]>();
+    for (const [root, id] of rootAliases) {
+      const workspaceRoots = rootsByWorkspace.get(id) ?? [];
+      workspaceRoots.push(root);
+      rootsByWorkspace.set(id, workspaceRoots);
+    }
+    for (const project of projects) {
+      project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
+    }
+    for (const [id, workspaceRoots] of rootsByWorkspace) {
+      if (projects.some((project) => project.id === id)) continue;
+      const representative = workspaceRoots[0];
+      projects.push({
+        id,
+        path: representative,
+        name: path.basename(representative),
         count: 0,
         lastTs: '',
-        roots: startRoot ? [startRoot] : [],
+        roots: [...workspaceRoots].sort(),
       });
     }
+    projects.sort((a, b) => b.lastTs.localeCompare(a.lastTs) || a.name.localeCompare(b.name));
     if (scope && !projects.some((p) => p.id === scope)) {
       projects.unshift({
         id: scope,

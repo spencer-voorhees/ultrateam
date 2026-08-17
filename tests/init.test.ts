@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { init, doctor } from '../src/setup/init.js';
 import { canonicalAgentName, normalizeAgentName } from '../src/agents/registry.js';
+import { knownRoots } from '../src/store/roots.js';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-init-'));
@@ -12,13 +13,15 @@ function tempDir(): string {
 
 test('init creates store, gitignore, AGENTS.md, and all agent configs with --all', () => {
   const root = tempDir();
+  const rootsPath = path.join(tempDir(), 'projects.json');
   fs.mkdirSync(path.join(root, '.git'));
-  init(root, { all: true });
+  init(root, { all: true, rootsPath });
 
   assert.ok(fs.existsSync(path.join(root, '.ultrateam')));
   assert.ok(fs.existsSync(path.join(root, 'AGENTS.md')));
   assert.ok(fs.existsSync(path.join(root, '.gitignore')));
   assert.ok(fs.readFileSync(path.join(root, '.gitignore'), 'utf8').includes('.ultrateam/'));
+  assert.deepEqual(knownRoots(rootsPath), [root]);
 
   // Check Claude Code (.mcp.json)
   assert.ok(fs.existsSync(path.join(root, '.mcp.json')));

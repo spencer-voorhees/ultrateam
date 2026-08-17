@@ -9,6 +9,7 @@ import path from 'node:path';
 import { STORE_DIR, readEntries } from '../store/jsonl.js';
 import { applyContract, CONTRACT_BEGIN } from '../contract.js';
 import { Index } from '../store/db.js';
+import { registerRoot } from '../store/roots.js';
 
 const SERVER_COMMAND = { command: 'ultrateam', args: ['serve'] };
 
@@ -109,6 +110,8 @@ function writeJson(file: string, value: Record<string, unknown>): void {
 export interface InitOptions {
   /** Configure every known agent, not just detected ones. */
   all?: boolean;
+  /** Override the global workspace registry path (primarily for isolation in tests). */
+  rootsPath?: string;
 }
 
 export function init(root: string, opts: InitOptions = {}): string[] {
@@ -122,6 +125,7 @@ export function init(root: string, opts: InitOptions = {}): string[] {
     fs.mkdirSync(storeDir, { recursive: true });
     report.push(`✓ created ${STORE_DIR}/`);
   }
+  registerRoot(root, opts.rootsPath);
 
   // 2. Keep the diary out of git by default; sharing it is an explicit choice.
   const gitignore = path.join(root, '.gitignore');
