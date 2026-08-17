@@ -61,6 +61,11 @@ test('initGlobal registers the MCP server at the user level with absolute paths 
 
     // Usage nudge lands in each agent's global instructions where one exists.
     assert.ok(fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8').includes('ultrateam shared memory'));
+    // Copilot gets a dedicated file under ~/.copilot/instructions.
+    assert.ok(fs.readFileSync(path.join(home, '.copilot', 'instructions', 'ultrateam.md'), 'utf8').includes('ultrateam shared memory'));
+    // Cursor has no file-based global rules, so the report tells the user where to paste it.
+    const report = initGlobal(cliEntry, { all: true });
+    assert.ok(report.some((l) => /Cursor.*User Rules/.test(l)));
 
     // Nothing was written into the project directory.
     assert.deepEqual(fs.readdirSync(project), []);
@@ -90,6 +95,7 @@ test('initGlobal is idempotent and reversible', () => {
     const claude = JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8'));
     assert.ok(!('ultrateam' in (claude.mcpServers ?? {})));
     assert.ok(!fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8').includes('ultrateam shared memory'));
+    assert.ok(!fs.existsSync(path.join(home, '.copilot', 'instructions', 'ultrateam.md')));
     const codex = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
     assert.ok(!/\[mcp_servers\.ultrateam\]/.test(codex));
     const gi = fs.readFileSync(path.join(home, '.config', 'git', 'ignore'), 'utf8');
