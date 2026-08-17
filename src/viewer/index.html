@@ -16,6 +16,10 @@
       if (localStorage.getItem('ut-sidebar-shelved') === 'true') {
         document.documentElement.classList.add('sidebar-shelved');
       }
+      var savedWidth = parseInt(localStorage.getItem('ut-sidebar-width'), 10);
+      if (savedWidth >= 200 && savedWidth <= 480) {
+        document.documentElement.style.setProperty('--sidebar-width', savedWidth + 'px');
+      }
     } catch (e) {}
   })();
 </script>
@@ -35,6 +39,9 @@ html.disable-transitions *::after {
   color-scheme: dark;
   --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+
+  /* Sidebar width — resizable at runtime, persisted in localStorage. */
+  --sidebar-width: 260px;
 
   /* OpenAI-inspired high-contrast dark theme */
   --bg: #212121;
@@ -175,8 +182,8 @@ button, input, select, textarea {
   position: sticky;
   top: 0;
   z-index: 50;
-  width: calc(100% - 260px);
-  margin-left: 260px;
+  width: calc(100% - var(--sidebar-width));
+  margin-left: var(--sidebar-width);
   height: 56px;
   background-color: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(16px) saturate(120%);
@@ -364,7 +371,7 @@ body.sidebar-shelved .sidebar-toggle-btn {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   gap: 0;
   align-items: stretch;
   transition: grid-template-columns 0.24s cubic-bezier(0.4, 0, 0.2, 1);
@@ -386,7 +393,7 @@ html.sidebar-shelved .workspace,
   position: fixed;
   z-index: 70;
   inset: 0 auto 0 0;
-  width: 260px;
+  width: var(--sidebar-width);
   height: 100vh;
   overflow-y: auto;
   padding: 0 0.8rem 2rem;
@@ -401,6 +408,166 @@ body.sidebar-shelved .sidebar {
   transform: translateX(-100%);
   visibility: hidden;
   transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.24s;
+}
+
+/* Drag handle on the sidebar's right edge to resize it. Fixed-positioned so it
+   tracks --sidebar-width without scrolling inside the sidebar. */
+.sidebar-resizer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: var(--sidebar-width);
+  width: 9px;
+  transform: translateX(-4px);
+  z-index: 75;
+  cursor: col-resize;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+html.sidebar-resizing .sidebar-resizer::after {
+  background: var(--accent-blue);
+}
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+html.sidebar-shelved .sidebar-resizer {
+  display: none;
+}
+/* Suppress layout transitions while actively dragging so it tracks the cursor. */
+html.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+html.sidebar-resizing .workspace,
+html.sidebar-resizing .sidebar,
+html.sidebar-resizing .nav-bar {
+  transition: none;
+}
+
+/* ============================================================
+   Settings Modal
+   ============================================================ */
+.ut-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+}
+.ut-modal-overlay[hidden] {
+  display: none;
+}
+.ut-modal {
+  width: min(520px, 100%);
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+.ut-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.ut-modal-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.ut-modal-body {
+  padding: 1.1rem;
+  overflow-y: auto;
+}
+.ut-settings-section-label {
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin: 0 0 0.2rem;
+}
+.ut-settings-section-hint {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  margin: 0 0 0.85rem;
+}
+.ut-ws-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+}
+.ut-ws-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ut-ws-default {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.25rem;
+}
+.ut-ws-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+.ut-ws-input:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+.ut-ws-reset {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.ut-ws-reset:hover {
+  background: var(--card-hover);
+  color: var(--text-primary);
+}
+.ut-ws-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .sidebar-header {
@@ -1241,6 +1408,9 @@ body.sidebar-shelved .sidebar {
     width: 100%;
     margin-left: 0;
   }
+  .sidebar-resizer {
+    display: none;
+  }
   .workspace {
     display: block;
   }
@@ -1451,6 +1621,11 @@ body.sidebar-shelved .sidebar {
     <symbol id="icon-chevron" viewBox="0 0 24 24">
       <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
+    <!-- Settings Gear -->
+    <symbol id="icon-settings" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -1482,6 +1657,9 @@ body.sidebar-shelved .sidebar {
   </div>
 
   <div class="nav-right">
+    <button id="settings-btn" class="nav-btn icon-only" title="Settings" aria-label="Settings" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" width="14" height="14"><use href="#icon-settings"/></svg>
+    </button>
     <button id="theme-btn" class="nav-btn icon-only" title="Toggle theme">
       <svg viewBox="0 0 24 24" width="13" height="13" id="theme-icon"><use href="#icon-sun"/></svg>
     </button>
@@ -1489,6 +1667,7 @@ body.sidebar-shelved .sidebar {
 </header>
 
 <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
+<div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (drag, or arrow keys; double-click to reset)" tabindex="0" title="Drag to resize · double-click to reset"></div>
 
 <!-- Main Workspace -->
 <div class="workspace" id="workspace-shell">
@@ -1592,6 +1771,16 @@ body.sidebar-shelved .sidebar {
 <!-- Toast -->
 <div class="toast-box" id="toast-hud"></div>
 
+<div class="ut-modal-overlay" id="settings-overlay" hidden>
+  <div class="ut-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="ut-modal-header">
+      <h2 id="settings-title">Settings</h2>
+      <button id="settings-close" class="nav-btn icon-only" type="button" aria-label="Close settings" title="Close">✕</button>
+    </div>
+    <div class="ut-modal-body" id="settings-body"></div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -1659,6 +1848,22 @@ function getAgentDisplayName(agentName, displayName, providerMeta) {
     return providerMeta.name;
   }
   return displayName || agentName;
+}
+
+// Per-workspace display-name overrides for the viewer. Stored in localStorage
+// (this browser only); the server name (folder basename) stays the default.
+const WS_NAMES_KEY = 'ut-workspace-names';
+function getWorkspaceNameOverrides() {
+  try { return JSON.parse(localStorage.getItem(WS_NAMES_KEY) || '{}') || {}; }
+  catch { return {}; }
+}
+function saveWorkspaceNameOverrides(map) {
+  try { localStorage.setItem(WS_NAMES_KEY, JSON.stringify(map)); } catch {}
+}
+function workspaceDisplayName(project) {
+  if (!project) return '';
+  const ov = getWorkspaceNameOverrides()[project.id];
+  return (ov && ov.trim()) ? ov : project.name;
 }
 
 function h(tag, attrs, ...children) {
@@ -1809,11 +2014,12 @@ function render({ animateStats = false } = {}) {
   updateThemeIcon();
   requestAnimationFrame(() => state.newEntryIds.clear());
 
+  const scopedProject = d.projects.find((p) => p.id === d.scope);
   const currentProjectName = d.projects.length === 0
     ? 'No workspaces yet'
     : d.scope === 'all'
       ? 'All Workspaces'
-      : (d.projects.find((p) => p.id === d.scope)?.name || 'Workspace');
+      : (scopedProject ? workspaceDisplayName(scopedProject) : 'Workspace');
   $('#top-workspace').textContent = currentProjectName;
   document.title = `ultrateam — ${currentProjectName}`;
 }
@@ -1916,7 +2122,7 @@ function renderProjectNav(d) {
     },
       h('div', { class: 'nav-item-left' },
         svgIcon('#icon-folder', 13, 13),
-        h('span', { class: 'nav-item-label' }, p.name)
+        h('span', { class: 'nav-item-label' }, p.id === 'all' ? p.name : workspaceDisplayName(p))
       ),
       h('span', { class: 'nav-count-pill' }, String(p.count || 0))
     );
@@ -2402,6 +2608,136 @@ try {
   updateThemeIcon();
   updateSidebarToggle();
 } catch {}
+
+// ---- Settings modal (workspace display names) ----
+const settingsOverlay = $('#settings-overlay');
+const settingsBody = $('#settings-body');
+let lastFocusBeforeSettings = null;
+
+function setWorkspaceName(id, name) {
+  const map = getWorkspaceNameOverrides();
+  if (name && name.trim()) map[id] = name.trim();
+  else delete map[id];
+  saveWorkspaceNameOverrides(map);
+  render();
+}
+
+function renderSettingsBody() {
+  const projects = (state.data && state.data.projects) ? state.data.projects : [];
+  const overrides = getWorkspaceNameOverrides();
+  const nodes = [
+    h('p', { class: 'ut-settings-section-label' }, 'Workspace display names'),
+    h('p', { class: 'ut-settings-section-hint' },
+      'Rename how a workspace appears in this viewer. Saved in this browser only, and never written to the folder or your files.'),
+  ];
+  if (projects.length === 0) {
+    nodes.push(h('div', { class: 'nav-empty-state' }, 'No workspaces yet'));
+  } else {
+    for (const p of projects) {
+      const hasOverride = !!(overrides[p.id] && overrides[p.id].trim());
+      const input = h('input', {
+        type: 'text', class: 'ut-ws-input',
+        value: hasOverride ? overrides[p.id] : '',
+        placeholder: p.name,
+        'aria-label': `Display name for ${p.name}`,
+      });
+      const reset = h('button', {
+        class: 'ut-ws-reset', type: 'button', title: 'Reset to default',
+        disabled: hasOverride ? null : true,
+        onclick: () => { input.value = ''; setWorkspaceName(p.id, ''); reset.disabled = true; },
+      }, 'Reset');
+      input.addEventListener('change', () => {
+        setWorkspaceName(p.id, input.value);
+        reset.disabled = !input.value.trim();
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+      nodes.push(h('div', { class: 'ut-ws-row' },
+        h('div', { class: 'ut-ws-row-main' },
+          h('div', { class: 'ut-ws-default' }, p.name),
+          input
+        ),
+        reset
+      ));
+    }
+  }
+  setChildren(settingsBody, ...nodes);
+}
+
+function openSettings() {
+  lastFocusBeforeSettings = document.activeElement;
+  renderSettingsBody();
+  settingsOverlay.hidden = false;
+  const first = settingsBody.querySelector('input');
+  if (first) first.focus();
+}
+function closeSettings() {
+  settingsOverlay.hidden = true;
+  if (lastFocusBeforeSettings && lastFocusBeforeSettings.focus) lastFocusBeforeSettings.focus();
+}
+
+$('#settings-btn').addEventListener('click', openSettings);
+$('#settings-close').addEventListener('click', closeSettings);
+settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !settingsOverlay.hidden) closeSettings();
+});
+
+// ---- Sidebar resize ----
+const SIDEBAR_MIN = 200, SIDEBAR_MAX = 480, SIDEBAR_DEFAULT = 260;
+const sidebarResizer = $('#sidebar-resizer');
+
+function getSidebarWidth() {
+  const v = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'), 10);
+  return isNaN(v) ? SIDEBAR_DEFAULT : v;
+}
+function setSidebarWidth(px, persist) {
+  const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(px)));
+  document.documentElement.style.setProperty('--sidebar-width', w + 'px');
+  if (sidebarResizer) sidebarResizer.setAttribute('aria-valuenow', String(w));
+  if (persist) { try { localStorage.setItem('ut-sidebar-width', String(w)); } catch {} }
+  return w;
+}
+
+if (sidebarResizer) {
+  sidebarResizer.setAttribute('aria-valuemin', String(SIDEBAR_MIN));
+  sidebarResizer.setAttribute('aria-valuemax', String(SIDEBAR_MAX));
+  sidebarResizer.setAttribute('aria-valuenow', String(getSidebarWidth()));
+
+  let dragging = false;
+  const onMove = (e) => {
+    if (!dragging) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    setSidebarWidth(x, false);
+    e.preventDefault();
+  };
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.documentElement.classList.remove('sidebar-resizing');
+    setSidebarWidth(getSidebarWidth(), true);
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('touchend', onUp);
+  };
+  const onDown = (e) => {
+    dragging = true;
+    document.documentElement.classList.add('sidebar-resizing');
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+    e.preventDefault();
+  };
+  sidebarResizer.addEventListener('mousedown', onDown);
+  sidebarResizer.addEventListener('touchstart', onDown, { passive: false });
+  sidebarResizer.addEventListener('dblclick', () => setSidebarWidth(SIDEBAR_DEFAULT, true));
+  sidebarResizer.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { setSidebarWidth(getSidebarWidth() - 16, true); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { setSidebarWidth(getSidebarWidth() + 16, true); e.preventDefault(); }
+    else if (e.key === 'Home') { setSidebarWidth(SIDEBAR_DEFAULT, true); e.preventDefault(); }
+  });
+}
 
 window.addEventListener('keydown', (ev) => {
   if (document.activeElement === searchInput) {
