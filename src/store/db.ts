@@ -9,8 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { type Entry, EntrySchema } from '../schema.js';
 import { canonicalAgentName } from '../agents/registry.js';
-import { readEntries } from './jsonl.js';
-import { defaultRootsPath, registerRoot } from './roots.js';
+import { isUltrateamInstallDirectory, readEntries } from './jsonl.js';
+import { defaultRootsPath, registerRoot, unregisterRoot } from './roots.js';
 import { isWorkspaceId, workspaceIdentity } from '../workspace.js';
 
 // Bump when the table shape changes: a mismatched index is dropped and
@@ -297,6 +297,9 @@ export class Index {
   }
 
   upsert(entry: Entry, projectPath: string): void {
+    if (isUltrateamInstallDirectory(projectPath)) {
+      throw new Error('Refusing to index the ultrateam installation directory as a workspace.');
+    }
     const workspaceId = workspaceIdentity(projectPath).id;
     this.withTx(() => this.upsertRow(entry, projectPath, workspaceId));
     registerRoot(projectPath, this.rootsPath);
@@ -308,6 +311,11 @@ export class Index {
    * project.
    */
   indexProject(projectRoot: string): { indexed: number; skipped: number } {
+    if (isUltrateamInstallDirectory(projectRoot)) {
+      this.removeProject(projectRoot);
+      unregisterRoot(projectRoot, this.rootsPath);
+      return { indexed: 0, skipped: 0 };
+    }
     const { entries, skipped } = readEntries(projectRoot);
     const workspaceId = workspaceIdentity(projectRoot).id;
     this.withTx(() => {

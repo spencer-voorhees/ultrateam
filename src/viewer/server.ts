@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Index, type ScoredEntry } from '../store/db.js';
-import { findProjectRoot } from '../store/jsonl.js';
-import { knownRoots } from '../store/roots.js';
+import { findProjectRoot, isUltrateamInstallDirectory } from '../store/jsonl.js';
+import { knownRoots, unregisterRoot } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
 import { workspaceIdentity } from '../workspace.js';
 
@@ -53,7 +53,14 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     // ?project= names a stable logical workspace id. Continue accepting a
     // previously-known root path as a backwards-compatible alias, but never
     // resolve an arbitrary request path (that would become a path oracle).
-    const roots = [...new Set([...knownRoots(), ...(startRoot ? [startRoot] : [])])];
+    const candidateRoots = [...new Set([...knownRoots(), ...(startRoot ? [startRoot] : [])])];
+    for (const root of candidateRoots) {
+      if (!isUltrateamInstallDirectory(root)) continue;
+      index.removeProject(root);
+      unregisterRoot(root);
+      lastIndexed.delete(root);
+    }
+    const roots = candidateRoots.filter((root) => !isUltrateamInstallDirectory(root));
     const rootAliases = new Map(roots.map((root) => [root, workspaceIdentity(root).id]));
     const allowed = new Set<string>(index.projectSummaries().map((p) => p.id));
     for (const id of rootAliases.values()) allowed.add(id);

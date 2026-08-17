@@ -10,6 +10,20 @@ import { type Entry, parseEntryLine } from '../schema.js';
 export const STORE_DIR = '.ultrateam';
 export const ENTRIES_FILE = 'entries.jsonl';
 
+/** The app's own source checkout is infrastructure, never a user workspace. */
+export function isUltrateamInstallDirectory(
+  value: string,
+  home: string = os.homedir(),
+  installHome: string | undefined = process.env.ULTRATEAM_HOME,
+): boolean {
+  const resolved = path.resolve(value);
+  const installs = [
+    path.resolve(home, '.ultrateam-app'),
+    ...(installHome ? [path.resolve(installHome)] : []),
+  ];
+  return installs.some((install) => resolved === install);
+}
+
 /**
  * Walk upward from startDir looking for a directory containing `.ultrateam/`.
  * Falls back to the nearest git root so first-time use lands entries at the
@@ -22,8 +36,9 @@ export function findProjectRoot(startDir: string): string | null {
   let dir = path.resolve(startDir);
   let gitRoot: string | null = null;
   for (;;) {
-    if (dir !== home && fs.existsSync(path.join(dir, STORE_DIR))) return dir;
-    if (!gitRoot && fs.existsSync(path.join(dir, '.git'))) gitRoot = dir;
+    const isInstall = isUltrateamInstallDirectory(dir, home);
+    if (dir !== home && !isInstall && fs.existsSync(path.join(dir, STORE_DIR))) return dir;
+    if (!gitRoot && !isInstall && fs.existsSync(path.join(dir, '.git'))) gitRoot = dir;
     const parent = path.dirname(dir);
     if (parent === dir) return gitRoot;
     dir = parent;
@@ -35,6 +50,9 @@ export function entriesPath(root: string): string {
 }
 
 export function appendEntry(root: string, entry: Entry): void {
+  if (isUltrateamInstallDirectory(root)) {
+    throw new Error('Refusing to write project history inside the ultrateam installation directory.');
+  }
   fs.mkdirSync(path.join(root, STORE_DIR), { recursive: true });
   fs.appendFileSync(entriesPath(root), JSON.stringify(entry) + '\n', 'utf8');
 }

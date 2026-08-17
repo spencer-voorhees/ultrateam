@@ -179,6 +179,27 @@ test('indexProject mirrors JSONL truth, replacing stale rows', () => {
   index.close();
 });
 
+test('indexProject prunes a previously registered installation workspace', () => {
+  const dir = tempDir();
+  const rootsPath = path.join(dir, 'projects.json');
+  const index = new Index(path.join(dir, 'index.db'), rootsPath);
+  const install = tempDir();
+  index.upsert(makeEntry({ project: '.ultrateam-app' }), install);
+  assert.ok(knownRoots(rootsPath).includes(install));
+
+  const previous = process.env.ULTRATEAM_HOME;
+  process.env.ULTRATEAM_HOME = install;
+  try {
+    assert.deepEqual(index.indexProject(install), { indexed: 0, skipped: 0 });
+    assert.equal(index.list({ projectPath: install }).length, 0);
+    assert.ok(!knownRoots(rootsPath).includes(install));
+  } finally {
+    if (previous === undefined) delete process.env.ULTRATEAM_HOME;
+    else process.env.ULTRATEAM_HOME = previous;
+    index.close();
+  }
+});
+
 test('scoped recall is not starved by a busier sibling project', () => {
   const index = tempIndex();
   index.upsert(
