@@ -382,9 +382,6 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   flex-direction: column;
   background: var(--bg);
   border-left: 1px solid var(--border);
-  /* Low opacity is what avoids banding: the alpha ramp steps stay below one
-     8-bit level per pixel. High-opacity or stacked shadows show contour lines. */
-  box-shadow: -12px 0 44px rgba(0, 0, 0, 0.14);
   transform: translateX(100%);
   transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 }
