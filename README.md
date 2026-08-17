@@ -39,8 +39,9 @@ curl -fsSL https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/ins
 
 **Windows (PowerShell)**
 ```powershell
-irm https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.ps1 | iex
+Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/spencer-voorhees/ultrateam/main/install.ps1 | iex
 ```
+(The `Set-ExecutionPolicy … -Scope Process` prefix lets the script run in this one session without changing your machine's policy.)
 
 Then, in any project:
 ```bash
