@@ -77,6 +77,10 @@ test('runningViewer clears stale state without signaling an unrelated process', 
 });
 
 test('viewer /api/state defaults to its launch workspace when it has memory, and supports explicit all', async () => {
+  // Isolate HOME so the viewer's index/registry (~/.ultrateam) is a temp dir,
+  // not the developer's real global state.
+  const previousHome = process.env.HOME;
+  process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-home-'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-viewer-scope-'));
   // A populated workspace at the launch directory — the viewer should scope to it.
   appendEntry(root, createEntry({
@@ -112,6 +116,8 @@ test('viewer /api/state defaults to its launch workspace when it has memory, and
     assert.ok(htmlRes.includes('rel="icon" type="image/png" href="/ultrateam-icon.png"'));
   } finally {
     handle.close();
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
   }
 });
 
