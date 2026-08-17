@@ -1776,6 +1776,22 @@ function dayKey(iso) {
 
 let isInitialFetch = true;
 
+function skeletonCard(w) {
+  return h('div', { class: 'notion-card skeleton-card', 'aria-hidden': 'true' },
+    h('div', { class: 'skeleton-bar', style: `width:${w[0]}%;height:16px;margin-bottom:0.85rem;border-radius:9999px;` }),
+    h('div', { class: 'skeleton-bar', style: `width:${w[1]}%;height:20px;margin-bottom:0.65rem;border-radius:6px;` }),
+    h('div', { class: 'skeleton-bar', style: `width:${w[2]}%;height:14px;margin-bottom:0.45rem;border-radius:4px;` }),
+    h('div', { class: 'skeleton-bar', style: `width:${w[3]}%;height:14px;border-radius:4px;` })
+  );
+}
+
+// Placeholder feed shown while a fresh workspace loads (switch with no cache),
+// instead of dimming the previous workspace's entries.
+function renderSkeletonFeed() {
+  const widths = [[28, 55, 88, 70], [32, 48, 80, 62], [26, 60, 84, 66], [30, 52, 90, 58]];
+  setChildren($('#feed-stream'), ...widths.map(skeletonCard));
+}
+
 async function fetchState({ transition = false } = {}) {
   const currentSeq = ++state.seq;
   const params = new URLSearchParams();
@@ -1798,7 +1814,7 @@ async function fetchState({ transition = false } = {}) {
       }
     } catch (e) {}
   }
-  if (transition && state.data && !servedFromCache) stream.classList.add('feed-refreshing');
+  if (transition && !servedFromCache) renderSkeletonFeed();
 
   try {
     const res = await fetch('/api/state?' + params.toString());
@@ -1854,12 +1870,9 @@ function syncUrl() {
 }
 
 function renderWithFeedTransition() {
-  const stream = $('#feed-stream');
-  stream.classList.add('feed-refreshing');
-  requestAnimationFrame(() => {
-    render({ animateStats: true });
-    requestAnimationFrame(() => stream.classList.remove('feed-refreshing'));
-  });
+  // Filtering is instant and client-side; render directly. (No feed-refreshing
+  // dim — its rAF-based removal could intermittently leave the feed dimmed.)
+  render({ animateStats: true });
 }
 
 function render({ animateStats = false } = {}) {
