@@ -253,7 +253,7 @@ program
 
 program
   .command('log')
-  .description('Write a diary entry by hand')
+  .description('Write a memory entry by hand')
   .requiredOption('-t, --title <title>', 'entry title')
   .requiredOption('-m, --summary <summary>', 'what happened and why')
   .option('-k, --kind <kind>', 'session | handoff | note', 'note')
@@ -334,7 +334,7 @@ program
 
 program
   .command('recall [query...]')
-  .description('Search the shared diary')
+  .description('Search shared memory')
   .option('-f, --files <files>', 'comma-separated files to boost matches for', csv, [])
   .option('-n, --limit <n>', 'max results', positiveInt, 8)
   .option('-a, --all-projects', 'search every project on this machine')

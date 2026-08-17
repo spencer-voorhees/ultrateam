@@ -227,7 +227,7 @@ test('file overlap requires a path-segment boundary', () => {
   index.close();
 });
 
-test('a shared diary indexed from two checkouts keeps both rows and dedups results', () => {
+test('shared entries indexed from two checkouts keep both rows and dedup results', () => {
   const index = tempIndex();
   const rootA = tempDir();
   const rootB = tempDir();

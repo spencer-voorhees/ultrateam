@@ -121,7 +121,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
     {
       title: 'Recall shared session history',
       description:
-        'Search the shared cross-agent session diary for this project. Call this at session start or when resuming a task, with a short query describing the work (and the files involved, if known). Returns the most relevant past entries from any agent.',
+        'Search shared cross-agent memory for this project. Call this at session start or when resuming a task, with a short query describing the work (and the files involved, if known). Returns the most relevant past entries from any agent.',
       inputSchema: {
         query: z
           .string()
@@ -152,7 +152,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
           content: [
             {
               type: 'text' as const,
-              text: `No matching entries in the shared diary for ${project}.${query ? ' Try a broader query or all_projects: true.' : ''} This may be a fresh project — proceed, and checkpoint as you work.${NUDGE}`,
+              text: `No matching entries in shared memory for ${project}.${query ? ' Try a broader query or all_projects: true.' : ''} This may be a fresh project — proceed, and checkpoint as you work.${NUDGE}`,
             },
           ],
         };
@@ -162,7 +162,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
         content: [
           {
             type: 'text' as const,
-            text: `Shared diary — ${results.length} most relevant entr${results.length === 1 ? 'y' : 'ies'} for ${project}:\n\n${body}${NUDGE}`,
+            text: `Shared memory — ${results.length} most relevant entr${results.length === 1 ? 'y' : 'ies'} for ${project}:\n\n${body}${NUDGE}`,
           },
         ],
       };
@@ -214,9 +214,9 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   server.registerTool(
     'checkpoint',
     {
-      title: 'Checkpoint progress to the shared diary',
+      title: 'Checkpoint progress to shared memory',
       description:
-        'Record a completed unit of work in the shared cross-agent session diary. Call this after each meaningful step so other agents (and future sessions) can pick up the trail.',
+        'Record a completed unit of work in shared cross-agent memory. Call this after each meaningful step so other agents (and future sessions) can pick up the trail.',
       inputSchema: {
         ...entryFields,
         open_threads: z
@@ -231,7 +231,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
         content: [
           {
             type: 'text' as const,
-            text: `Checkpointed "${args.title}" (${id}) to the shared diary for ${project}.`,
+            text: `Checkpointed "${args.title}" (${id}) to shared memory for ${project}.`,
           },
         ],
       };

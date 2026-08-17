@@ -123,7 +123,7 @@ export function init(root: string, opts: InitOptions = {}): string[] {
     report.push(`✓ created ${STORE_DIR}/`);
   }
 
-  // 2. Keep the diary out of git by default; sharing it is an explicit choice.
+  // 2. Keep memory out of git by default; sharing it is an explicit choice.
   const gitignore = path.join(root, '.gitignore');
   const existingIgnore = fs.existsSync(gitignore) ? fs.readFileSync(gitignore, 'utf8') : null;
   const ignoreLine = `${STORE_DIR}/`;
@@ -138,7 +138,7 @@ export function init(root: string, opts: InitOptions = {}): string[] {
         ? `${ignoreLine}\n`
         : existingIgnore.replace(/\n?$/, '\n') + `${ignoreLine}\n`;
     fs.writeFileSync(gitignore, next, 'utf8');
-    report.push(`✓ added ${ignoreLine} to .gitignore (delete the line to share the diary via git)`);
+    report.push(`✓ added ${ignoreLine} to .gitignore (delete the line to share memory via git)`);
   }
 
   // 3. The one contract, in the one file every agent reads.
@@ -198,7 +198,7 @@ export function doctor(root: string | null): string[] {
   } else {
     report.push(`✓ project root: ${root}`);
     const { entries, skipped } = readEntries(root);
-    report.push(`✓ diary: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}${skipped > 0 ? ` (${skipped} corrupt line${skipped === 1 ? '' : 's'} skipped)` : ''}`);
+    report.push(`✓ memory: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}${skipped > 0 ? ` (${skipped} corrupt line${skipped === 1 ? '' : 's'} skipped)` : ''}`);
 
     const agentsMd = path.join(root, 'AGENTS.md');
     const hasContract =

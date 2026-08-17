@@ -9,9 +9,12 @@
 <script>
   (function() {
     try {
-      var saved = localStorage.getItem('ut-theme');
-      if (saved === 'dark' || saved === 'light') {
-        document.documentElement.dataset.theme = saved;
+      var savedTheme = localStorage.getItem('ut-theme');
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        document.documentElement.dataset.theme = savedTheme;
+      }
+      if (localStorage.getItem('ut-sidebar-shelved') === 'true') {
+        document.documentElement.classList.add('sidebar-shelved');
       }
     } catch (e) {}
   })();
@@ -185,6 +188,7 @@ button, input, select, textarea {
   gap: 1rem;
   transition: width 0.24s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
+html.sidebar-shelved .nav-bar,
 body.sidebar-shelved .nav-bar {
   width: 100%;
   margin-left: 0;
@@ -207,6 +211,7 @@ body.sidebar-shelved .nav-bar {
 .top-nav-brand {
   display: none;
 }
+html.sidebar-shelved .top-nav-brand,
 body.sidebar-shelved .top-nav-brand {
   display: flex;
 }
@@ -333,6 +338,7 @@ body.sidebar-shelved .top-nav-brand {
 .sidebar-toggle-btn {
   display: none;
 }
+html.sidebar-shelved .sidebar-toggle-btn,
 body.sidebar-shelved .sidebar-toggle-btn {
   display: inline-flex;
 }
@@ -353,6 +359,7 @@ body.sidebar-shelved .sidebar-toggle-btn {
   align-items: stretch;
   transition: grid-template-columns 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
+html.sidebar-shelved .workspace,
 .workspace.sidebar-shelved {
   grid-template-columns: 0 minmax(0, 1fr);
 }
@@ -379,6 +386,7 @@ body.sidebar-shelved .sidebar-toggle-btn {
   visibility: visible;
   transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear;
 }
+html.sidebar-shelved .sidebar,
 body.sidebar-shelved .sidebar {
   transform: translateX(-100%);
   visibility: hidden;
@@ -600,6 +608,46 @@ body.sidebar-shelved .sidebar {
 }
 .count-updated {
   animation: count-settle 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ============================================================
+   Zero-Flicker Skeleton & Placeholder States
+   ============================================================ */
+.skeleton-shimmer {
+  display: inline-block;
+  background: color-mix(in srgb, var(--surface-hover) 75%, var(--text-tertiary) 25%);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+.skeleton-title {
+  width: 140px;
+  height: 1.55rem;
+  border-radius: 6px;
+}
+.skeleton-num {
+  width: 16px;
+  height: 0.85rem;
+  border-radius: 3px;
+}
+.skeleton-badge {
+  width: 12px;
+  height: 0.72rem;
+  border-radius: 3px;
+}
+.skeleton-card {
+  pointer-events: none;
+  user-select: none;
+  border-color: var(--border);
+}
+.skeleton-bar {
+  background: color-mix(in srgb, var(--surface-hover) 75%, var(--text-tertiary) 25%);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
 }
 
 /* Database Views Toolbar */
@@ -1397,7 +1445,7 @@ body.sidebar-shelved .sidebar {
   <div class="nav-center">
     <div class="search-container">
       <svg class="search-icon-svg" viewBox="0 0 24 24"><use href="#icon-search"/></svg>
-      <input type="search" id="search-input" class="search-box" placeholder="Search diary entries, decisions, files…" autocomplete="off" spellcheck="false" aria-label="Search diary">
+      <input type="search" id="search-input" class="search-box" placeholder="Search entries, decisions, files…" autocomplete="off" spellcheck="false" aria-label="Search entries">
       <button id="search-clear" class="search-clear-btn" title="Clear search">✕</button>
       <span class="search-shortcut">⌘K</span>
     </div>
@@ -1451,26 +1499,26 @@ body.sidebar-shelved .sidebar {
     <!-- Page Header (Notion Database Page Top) -->
     <div class="page-header">
       <div class="page-title-row">
-        <h1 class="page-title" id="page-title-text">Shared Agent Diary</h1>
+        <h1 class="page-title" id="page-title-text"><span class="skeleton-shimmer skeleton-title"></span></h1>
       </div>
 
       <!-- Properties Grid -->
       <div class="properties-grid">
         <div class="property-chip">
           <span class="property-label">Total Entries</span>
-          <span class="property-value" id="stat-total">0</span>
+          <span class="property-value" id="stat-total"><span class="skeleton-shimmer skeleton-num"></span></span>
         </div>
         <div class="property-chip">
           <span class="property-label">Handoffs</span>
-          <span class="property-value" id="stat-handoffs">0</span>
+          <span class="property-value" id="stat-handoffs"><span class="skeleton-shimmer skeleton-num"></span></span>
         </div>
         <div class="property-chip">
           <span class="property-label" title="Open items recorded by the latest handoff; not a live resolved count">Latest Handoff Items</span>
-          <span class="property-value" id="stat-threads">0</span>
+          <span class="property-value" id="stat-threads"><span class="skeleton-shimmer skeleton-num"></span></span>
         </div>
         <div class="property-chip">
           <span class="property-label">Active Agents</span>
-          <span class="property-value" id="stat-agents">0</span>
+          <span class="property-value" id="stat-agents"><span class="skeleton-shimmer skeleton-num"></span></span>
         </div>
       </div>
     </div>
@@ -1480,25 +1528,38 @@ body.sidebar-shelved .sidebar {
       <div class="views-tabs">
         <button class="view-tab-btn active" data-kind="all">
           <span>All</span>
-          <span class="view-tab-count" id="badge-all">0</span>
+          <span class="view-tab-count" id="badge-all"><span class="skeleton-shimmer skeleton-badge"></span></span>
         </button>
         <button class="view-tab-btn" data-kind="handoff">
           <span>Handoffs</span>
-          <span class="view-tab-count" id="badge-handoff">0</span>
+          <span class="view-tab-count" id="badge-handoff"><span class="skeleton-shimmer skeleton-badge"></span></span>
         </button>
         <button class="view-tab-btn" data-kind="session">
           <span>Checkpoints</span>
-          <span class="view-tab-count" id="badge-session">0</span>
+          <span class="view-tab-count" id="badge-session"><span class="skeleton-shimmer skeleton-badge"></span></span>
         </button>
         <button class="view-tab-btn" data-kind="note">
           <span>Notes</span>
-          <span class="view-tab-count" id="badge-note">0</span>
+          <span class="view-tab-count" id="badge-note"><span class="skeleton-shimmer skeleton-badge"></span></span>
         </button>
       </div>
     </div>
 
     <!-- Feed Stream -->
-    <div class="timeline-feed" id="feed-stream"></div>
+    <div class="timeline-feed" id="feed-stream">
+      <div class="notion-card skeleton-card" aria-hidden="true">
+        <div class="skeleton-bar" style="width: 28%; height: 16px; margin-bottom: 0.85rem; border-radius: 9999px;"></div>
+        <div class="skeleton-bar" style="width: 55%; height: 20px; margin-bottom: 0.65rem; border-radius: 6px;"></div>
+        <div class="skeleton-bar" style="width: 88%; height: 14px; margin-bottom: 0.45rem; border-radius: 4px;"></div>
+        <div class="skeleton-bar" style="width: 70%; height: 14px; border-radius: 4px;"></div>
+      </div>
+      <div class="notion-card skeleton-card" aria-hidden="true">
+        <div class="skeleton-bar" style="width: 32%; height: 16px; margin-bottom: 0.85rem; border-radius: 9999px;"></div>
+        <div class="skeleton-bar" style="width: 48%; height: 20px; margin-bottom: 0.65rem; border-radius: 6px;"></div>
+        <div class="skeleton-bar" style="width: 80%; height: 14px; margin-bottom: 0.45rem; border-radius: 4px;"></div>
+        <div class="skeleton-bar" style="width: 62%; height: 14px; border-radius: 4px;"></div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -1641,6 +1702,8 @@ function dayKey(iso) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+let isInitialFetch = true;
+
 async function fetchState({ transition = false } = {}) {
   const currentSeq = ++state.seq;
   const params = new URLSearchParams();
@@ -1664,12 +1727,19 @@ async function fetchState({ transition = false } = {}) {
     state.rawPayload = raw;
     state.data = nextData;
     if (!state.scope) state.scope = state.data.scope;
+
+    try {
+      const cacheKey = `ut-state-cache:${state.scope || 'all'}`;
+      sessionStorage.setItem(cacheKey, raw);
+    } catch (e) {}
+
     syncUrl();
-    render();
+    render({ animateStats: !isInitialFetch });
   } catch (err) {
     if (currentSeq !== state.seq) return;
-    renderError(err.message);
+    if (!state.data) renderError(err.message);
   } finally {
+    isInitialFetch = false;
     if (transition && currentSeq === state.seq) {
       requestAnimationFrame(() => stream.classList.remove('feed-refreshing'));
     }
@@ -1697,19 +1767,19 @@ function renderWithFeedTransition() {
   const stream = $('#feed-stream');
   stream.classList.add('feed-refreshing');
   requestAnimationFrame(() => {
-    render();
+    render({ animateStats: true });
     requestAnimationFrame(() => stream.classList.remove('feed-refreshing'));
   });
 }
 
-function render() {
+function render({ animateStats = false } = {}) {
   const d = state.data;
   if (!d) return;
 
-  renderOverview(d);
+  renderOverview(d, { animateStats });
   renderRoster(d);
   renderProjectNav(d);
-  renderFeed(d);
+  renderFeed(d, { animateStats });
   updateThemeIcon();
   requestAnimationFrame(() => state.newEntryIds.clear());
 
@@ -1720,18 +1790,20 @@ function render() {
   document.title = `ultrateam — ${currentProjectName}`;
 }
 
-function renderOverview(d) {
-  setCount('#stat-total', d.stats.entries || 0);
-  setCount('#stat-handoffs', d.stats.handoffs || 0);
-  setCount('#stat-threads', d.stats.openThreads || 0);
-  setCount('#stat-agents', d.agents ? d.agents.length : 0);
+function renderOverview(d, { animateStats = false } = {}) {
+  setCount('#stat-total', d.stats.entries || 0, animateStats);
+  setCount('#stat-handoffs', d.stats.handoffs || 0, animateStats);
+  setCount('#stat-threads', d.stats.openThreads || 0, animateStats);
+  setCount('#stat-agents', d.agents ? d.agents.length : 0, animateStats);
 }
 
-function setCount(selector, value) {
+function setCount(selector, value, animate = false) {
   const el = $(selector);
+  if (!el) return;
   const next = String(value);
   if (el.textContent === next) return;
   el.textContent = next;
+  if (!animate) return;
   el.classList.remove('count-updated');
   void el.offsetWidth;
   el.classList.add('count-updated');
@@ -1819,16 +1891,16 @@ function renderProjectNav(d) {
   }));
 }
 
-function renderFeed(d) {
+function renderFeed(d, { animateStats = false } = {}) {
   let entries = d.entries || [];
 
   const totalHandoffs = entries.filter((e) => e.kind === 'handoff').length;
   const totalSessions = entries.filter((e) => e.kind === 'session').length;
   const totalNotes = entries.filter((e) => e.kind === 'note').length;
-  setCount('#badge-all', entries.length);
-  setCount('#badge-handoff', totalHandoffs);
-  setCount('#badge-session', totalSessions);
-  setCount('#badge-note', totalNotes);
+  setCount('#badge-all', entries.length, animateStats);
+  setCount('#badge-handoff', totalHandoffs, animateStats);
+  setCount('#badge-session', totalSessions, animateStats);
+  setCount('#badge-note', totalNotes, animateStats);
 
   if (state.kindFilter === 'handoff') entries = entries.filter((e) => e.kind === 'handoff');
   else if (state.kindFilter === 'session') entries = entries.filter((e) => e.kind === 'session');
@@ -1846,7 +1918,7 @@ function renderFeed(d) {
     if (state.kindFilter !== 'all') reasons.push(ENTRY_KIND_METADATA[state.kindFilter]?.label.toLowerCase() || state.kindFilter);
     const message = reasons.length > 0
       ? `No entries match ${reasons.join(' and ')} in this workspace.`
-      : 'No diary entries in this workspace yet.';
+      : 'No entries in this workspace yet.';
     setChildren(stream,
       h('div', { class: 'empty-block' },
         h('p', { style: 'margin:0;font-size:0.85rem;' }, message),
@@ -2204,7 +2276,7 @@ function updateSidebarToggle() {
   const isMobile = mobileSidebarQuery.matches;
   const isVisible = isMobile
     ? document.body.classList.contains('sidebar-open')
-    : !workspaceShell.classList.contains('sidebar-shelved');
+    : !workspaceShell.classList.contains('sidebar-shelved') && !document.documentElement.classList.contains('sidebar-shelved');
   const label = isMobile
     ? (isVisible ? 'Close navigation' : 'Open navigation')
     : (isVisible ? 'Hide sidebar' : 'Show sidebar');
@@ -2222,6 +2294,7 @@ function setMobileSidebarOpen(open) {
 }
 
 function setSidebarShelved(shelved) {
+  document.documentElement.classList.toggle('sidebar-shelved', shelved);
   document.body.classList.toggle('sidebar-shelved', shelved);
   workspaceShell.classList.toggle('sidebar-shelved', shelved);
   try { localStorage.setItem('ut-sidebar-shelved', String(shelved)); } catch {}
@@ -2267,6 +2340,7 @@ try {
     document.documentElement.dataset.theme = savedTheme;
   }
   if (localStorage.getItem('ut-sidebar-shelved') === 'true') {
+    document.documentElement.classList.add('sidebar-shelved');
     document.body.classList.add('sidebar-shelved');
     workspaceShell.classList.add('sidebar-shelved');
   }
@@ -2345,6 +2419,21 @@ setInterval(() => {
     fetchState();
   }
 }, 10000);
+
+// Instant synchronous hydration from session storage (zero refresh flicker)
+try {
+  const cacheKey = `ut-state-cache:${state.scope || 'all'}`;
+  const cachedRaw = sessionStorage.getItem(cacheKey);
+  if (cachedRaw) {
+    const cachedData = JSON.parse(cachedRaw);
+    if (cachedData && cachedData.stats && Array.isArray(cachedData.entries)) {
+      state.data = cachedData;
+      state.rawPayload = cachedRaw;
+      if (!state.scope) state.scope = state.data.scope;
+      render({ animateStats: false });
+    }
+  }
+} catch (e) {}
 
 fetchState();
 </script>

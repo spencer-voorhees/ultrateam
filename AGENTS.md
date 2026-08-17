@@ -5,7 +5,7 @@ Instructions for coding agents working in this repo.
 <!-- ultrateam:begin -->
 ## ultrateam — shared agent memory
 
-This repo keeps a shared session diary that every coding agent (Claude Code,
+This repo keeps a shared agent memory that every coding agent (Claude Code,
 Cursor, Copilot, Codex, ...) reads and writes through the `ultrateam` MCP
 server. Follow this protocol regardless of which agent you are:
 

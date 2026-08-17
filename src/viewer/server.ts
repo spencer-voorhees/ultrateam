@@ -218,7 +218,7 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
         reject(err);
       }
     });
-    // Loopback only: the diary is local data and stays local.
+    // Loopback only: memory is local data and stays local.
     server.listen(port, '127.0.0.1', () => {
       const address = server.address();
       const boundPort = typeof address === 'object' && address ? address.port : port;

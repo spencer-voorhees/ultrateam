@@ -348,7 +348,7 @@ export class Index {
   list(opts: { projectPath?: string; workspaceId?: string; limit?: number } = {}): ScoredEntry[] {
     const limit = sanitizeLimit(opts.limit, 20);
     const workspaceId = resolveWorkspaceScope(opts.projectPath, opts.workspaceId);
-    // GROUP BY id: a diary committed to git and indexed from two checkouts
+    // GROUP BY id: entries committed to git and indexed from two checkouts
     // exists under both roots — show the entry once.
     const rows = (
       workspaceId
