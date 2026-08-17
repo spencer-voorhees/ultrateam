@@ -1792,6 +1792,48 @@ function renderSkeletonFeed() {
   setChildren($('#feed-stream'), ...widths.map(skeletonCard));
 }
 
+// Filter the complete "All" snapshot down to one workspace, entirely client-side,
+// so switching is instant and never waits on the server. The server response
+// later trues this up (for anything beyond the loaded set).
+function deriveScopedView(source, scopeId) {
+  if (!source || !Array.isArray(source.projects) || !scopeId || scopeId === 'all') return null;
+  if (source.scope && source.scope !== 'all') return null; // only a superset can be filtered
+  const proj = source.projects.find((p) => p.id === scopeId);
+  if (!proj) return null;
+  const roots = new Set((proj.roots && proj.roots.length) ? proj.roots : [proj.path]);
+  const entries = (source.entries || []).filter((e) => roots.has(e.projectPath));
+  const agents = new Map();
+  for (const e of entries) {
+    const nm = e.agent && e.agent.name;
+    if (!nm) continue;
+    const cur = agents.get(nm) || { name: nm, count: 0, meta: { provider: e.agent && e.agent.provider } };
+    cur.count++;
+    agents.set(nm, cur);
+  }
+  return {
+    scope: scopeId,
+    query: null,
+    projects: source.projects,
+    entries,
+    stats: {
+      entries: proj.count != null ? proj.count : entries.length,
+      handoffs: entries.filter((e) => e.kind === 'handoff').length,
+      openThreads: entries.reduce((n, e) => n + ((e.open_threads && e.open_threads.length) || 0), 0),
+    },
+    activityTs: entries.map((e) => e.ts).filter(Boolean),
+    agents: [...agents.values()].sort((a, b) => b.count - a.count),
+  };
+}
+
+// Keep a fresh "All" snapshot in sessionStorage so switches can filter it even
+// when the app launched straight into a single workspace.
+async function warmAllCache() {
+  try {
+    const res = await fetch('/api/state?project=all');
+    if (res.ok) sessionStorage.setItem('ut-state-cache:all', await res.text());
+  } catch (e) {}
+}
+
 async function fetchState({ transition = false } = {}) {
   const currentSeq = ++state.seq;
   const params = new URLSearchParams();
@@ -1802,10 +1844,21 @@ async function fetchState({ transition = false } = {}) {
   syncUrl();
   const stream = $('#feed-stream');
 
-  // Instant switch: if we've viewed this scope before, paint its cached content
-  // immediately and revalidate in the background — no dim, no waiting.
-  let servedFromCache = false;
-  if (transition) {
+  // Instant switch: paint immediately from data we already have, then revalidate
+  // in the background — no round-trip on the switch itself, no dim, no waiting.
+  let servedInstant = false;
+  if (transition && state.scope && state.scope !== 'all') {
+    // 1. Filter the complete "All" snapshot client-side.
+    try {
+      const allRaw = sessionStorage.getItem('ut-state-cache:all');
+      if (allRaw) {
+        const derived = deriveScopedView(JSON.parse(allRaw), state.scope);
+        if (derived) { state.data = derived; render({ animateStats: false }); servedInstant = true; }
+      }
+    } catch (e) {}
+  }
+  if (transition && !servedInstant) {
+    // 2. Fall back to this scope's own cached response.
     try {
       const cached = sessionStorage.getItem(`ut-state-cache:${state.scope || 'all'}`);
       if (cached && cached !== state.rawPayload) {
@@ -1813,11 +1866,11 @@ async function fetchState({ transition = false } = {}) {
         state.data = JSON.parse(cached);
         if (!state.scope) state.scope = state.data.scope;
         render({ animateStats: false });
-        servedFromCache = true;
+        servedInstant = true;
       }
     } catch (e) {}
   }
-  if (transition && !servedFromCache) renderSkeletonFeed();
+  if (transition && !servedInstant) renderSkeletonFeed();
 
   try {
     const res = await fetch('/api/state?' + params.toString());
@@ -2629,6 +2682,9 @@ try {
 } catch (e) {}
 
 fetchState();
+// Warm the "All" snapshot so switching to any workspace can filter it instantly,
+// even when the app launched straight into a single workspace.
+if (state.scope && state.scope !== 'all') warmAllCache();
 </script>
 </body>
 </html>
