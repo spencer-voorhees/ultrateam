@@ -69,13 +69,17 @@ export function npmPrefix(): string | null {
   }
 }
 
+export function shouldUnlinkBeforeExit(platform: NodeJS.Platform = process.platform): boolean {
+  // On Windows the CLI itself is running underneath ultrateam.cmd. Removing
+  // that shim before Node returns makes cmd.exe report "The batch file could
+  // not be found" when it tries to resume the launcher.
+  return platform !== 'win32';
+}
+
 export function unlinkGlobalCommand(): void {
+  if (!shouldUnlinkBeforeExit()) return;
   try {
-    const command = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'npm';
-    const args = process.platform === 'win32'
-      ? ['/d', '/s', '/c', 'npm unlink -g ultrateam']
-      : ['unlink', '-g', 'ultrateam'];
-    execFileSync(command, args, {
+    execFileSync('npm', ['unlink', '-g', 'ultrateam'], {
       stdio: 'ignore',
       windowsHide: true,
     });
@@ -103,6 +107,9 @@ while (Date.now() < deadline) {
   try { process.kill(parentPid, 0); await new Promise((resolve) => setTimeout(resolve, 100)); }
   catch { break; }
 }
+// On Windows, cmd.exe still has to resume ultrateam.cmd after the Node child
+// exits. Give the launcher time to return before deleting its batch file.
+await new Promise((resolve) => setTimeout(resolve, 1000));
 for (const target of targets) {
   try { fs.rmSync(target, { recursive: true, force: true }); } catch {}
 }

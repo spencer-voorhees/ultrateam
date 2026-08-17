@@ -3,7 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { scheduleRemoval, uninstallTargets } from '../src/uninstall.js';
+import {
+  scheduleRemoval,
+  shouldUnlinkBeforeExit,
+  uninstallTargets,
+} from '../src/uninstall.js';
+
+test('Windows keeps its active batch launcher until after the CLI exits', () => {
+  assert.equal(shouldUnlinkBeforeExit('win32'), false);
+  assert.equal(shouldUnlinkBeforeExit('darwin'), true);
+  assert.equal(shouldUnlinkBeforeExit('linux'), true);
+});
 
 test('uninstall targets only global app state and known command shims', () => {
   const home = path.resolve('/test/home');
@@ -45,7 +55,10 @@ test('detached cleanup removes exact targets after the parent is gone', async ()
   fs.writeFileSync(path.join(target, 'state.json'), '{}');
 
   scheduleRemoval([target], 2_147_483_647);
-  const deadline = Date.now() + 3000;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(fs.existsSync(target), true);
+
+  const deadline = Date.now() + 4000;
   while (fs.existsSync(target) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
