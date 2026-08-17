@@ -293,6 +293,13 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
 .search-box::placeholder {
   color: var(--text-secondary);
 }
+/* type="search" renders a native clear button in WebKit/Blink; we ship our own
+   #search-clear, so hide the native one to avoid two clear icons. */
+.search-box::-webkit-search-cancel-button,
+.search-box::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
 .search-shortcut {
   position: absolute;
   right: 0.55rem;
