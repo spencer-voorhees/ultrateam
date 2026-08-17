@@ -22,7 +22,7 @@ function serverCommand(cliEntry: string): { command: string; args: string[] } {
   return { command: process.execPath, args: [cliEntry, 'serve'] };
 }
 
-type GlobalStyle = 'mcpServers' | 'servers' | 'codex-toml';
+type GlobalStyle = 'mcpServers' | 'servers' | 'codex-toml' | 'copilot-cli';
 
 interface AgentTarget {
   key: string;
@@ -105,7 +105,7 @@ export const AGENT_TARGETS: AgentTarget[] = [
   },
   {
     key: 'copilot',
-    label: 'VS Code / Copilot',
+    label: 'VS Code (Copilot)',
     detect: () =>
       fs.existsSync(path.join(os.homedir(), 'AppData', 'Roaming', 'Code')) ||
       fs.existsSync(path.join(os.homedir(), '.config', 'Code')) ||
@@ -123,6 +123,19 @@ export const AGENT_TARGETS: AgentTarget[] = [
     globalStyle: 'servers',
     // VS Code / Copilot reads user-level instructions from ~/.copilot/instructions
     // recursively, so we drop a dedicated file there.
+    globalInstructionsPath: () => path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.md'),
+    globalInstructionsDedicated: true,
+  },
+  {
+    // The Copilot CLI (and the standalone app) read MCP from their own file with
+    // an mcpServers/type:"local" shape — NOT VS Code's user mcp.json.
+    key: 'copilot-cli',
+    label: 'GitHub Copilot CLI',
+    detect: () => fs.existsSync(path.join(os.homedir(), '.copilot')),
+    configPath: (root) => path.join(root, '.mcp.json'),
+    ...mcpServersStyle(),
+    globalConfigPath: () => path.join(os.homedir(), '.copilot', 'mcp-config.json'),
+    globalStyle: 'copilot-cli',
     globalInstructionsPath: () => path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.md'),
     globalInstructionsDedicated: true,
   },
@@ -193,7 +206,12 @@ function writeGlobalRegistration(
     config[key] !== null &&
     'ultrateam' in (config[key] as Record<string, unknown>);
   const servers = (config[key] ??= {}) as Record<string, unknown>;
-  servers.ultrateam = target.globalStyle === 'servers' ? { type: 'stdio', ...cmd } : { ...cmd };
+  servers.ultrateam =
+    target.globalStyle === 'servers'
+      ? { type: 'stdio', ...cmd }
+      : target.globalStyle === 'copilot-cli'
+        ? { type: 'local', ...cmd, tools: ['*'] }
+        : { ...cmd };
   writeJson(file, config);
   return { file, already };
 }

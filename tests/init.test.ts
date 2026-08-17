@@ -55,6 +55,12 @@ test('initGlobal registers the MCP server at the user level with absolute paths 
     assert.match(codex, /\[mcp_servers\.ultrateam\]/);
     assert.ok(codex.includes(JSON.stringify(process.execPath)));
 
+    // Copilot CLI — ~/.copilot/mcp-config.json, mcpServers with type:"local".
+    const copilotCli = JSON.parse(fs.readFileSync(path.join(home, '.copilot', 'mcp-config.json'), 'utf8'));
+    assert.equal(copilotCli.mcpServers.ultrateam.type, 'local');
+    assert.equal(copilotCli.mcpServers.ultrateam.command, process.execPath);
+    assert.deepEqual(copilotCli.mcpServers.ultrateam.args, [cliEntry, 'serve']);
+
     // Global gitignore excludes the store, so it never lands in any repo.
     const gi = fs.readFileSync(path.join(home, '.config', 'git', 'ignore'), 'utf8');
     assert.ok(gi.split(/\r?\n/).some((l) => l.trim() === '.ultrateam/'));
