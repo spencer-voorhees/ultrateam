@@ -12,6 +12,7 @@ import { init, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { startViewer } from './viewer/server.js';
 import {
+  defaultViewerLogPath,
   removeViewerState,
   runningViewer,
   stopViewer,
@@ -163,6 +164,9 @@ program
       const instanceId = randomUUID();
       const cliPath = fileURLToPath(import.meta.url);
       const runtimeArgs = path.extname(cliPath) === '.ts' ? process.execArgv : [];
+      const logFile = defaultViewerLogPath();
+      fs.mkdirSync(path.dirname(logFile), { recursive: true });
+      const outFd = fs.openSync(logFile, 'a');
       const child = spawn(
         process.execPath,
         [...runtimeArgs, cliPath, 'view', '--foreground', '--no-open', '--port', String(opts.port)],
@@ -174,10 +178,11 @@ program
             ULTRATEAM_VIEWER_INSTANCE_ID: instanceId,
             ULTRATEAM_VIEWER_MODE: 'background',
           },
-          stdio: 'ignore',
+          stdio: ['ignore', outFd, outFd],
           windowsHide: true,
         },
       );
+      fs.closeSync(outFd);
       const state = await waitForViewer(instanceId);
       if (!state) {
         if (child.pid && child.exitCode === null) {
@@ -187,7 +192,16 @@ program
             // It may have already exited after failing to bind.
           }
         }
-        throw new Error(`The ultrateam viewer did not start on port ${opts.port}.`);
+        let detail = '';
+        try {
+          if (fs.existsSync(logFile)) {
+            const lines = fs.readFileSync(logFile, 'utf8').trim().split(/\r?\n/).slice(-10);
+            if (lines.length > 0 && lines.some((l) => l.trim().length > 0)) {
+              detail = `:\n${lines.join('\n')}`;
+            }
+          }
+        } catch {}
+        throw new Error(`The ultrateam viewer did not start on port ${opts.port}${detail}`);
       }
       child.unref();
       console.log(`Started ultrateam viewer in the background at ${state.url} (PID ${state.pid}).`);

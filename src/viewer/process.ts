@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -26,6 +27,10 @@ const HEALTH_TIMEOUT_MS = 1000;
 
 export function defaultViewerStatePath(): string {
   return process.env.ULTRATEAM_VIEWER_STATE_PATH ?? path.join(os.homedir(), '.ultrateam', 'viewer.json');
+}
+
+export function defaultViewerLogPath(): string {
+  return process.env.ULTRATEAM_VIEWER_LOG_PATH ?? path.join(os.homedir(), '.ultrateam', 'viewer.log');
 }
 
 function isLoopbackUrl(value: string): boolean {
@@ -67,9 +72,18 @@ export function readViewerState(file: string = defaultViewerStatePath()): Viewer
 
 export function writeViewerState(state: ViewerState, file: string = defaultViewerStatePath()): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const content = JSON.stringify(state, null, 2) + '\n';
   const temp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(state, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(temp, file);
+  try {
+    fs.writeFileSync(temp, content, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temp, file);
+  } catch {
+    // Windows NTFS fallback when renameSync encounters lock or permission differences
+    try {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    } catch {}
+    fs.writeFileSync(file, content, { encoding: 'utf8', mode: 0o600 });
+  }
 }
 
 export function removeViewerState(
@@ -92,7 +106,8 @@ export function processIsAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
+    const code = (err as NodeJS.ErrnoException).code;
+    return code === 'EPERM';
   }
 }
 
@@ -134,7 +149,7 @@ export async function runningViewer(
 ): Promise<ViewerState | null> {
   const state = readViewerState(file);
   if (!state) return null;
-  if (processIsAlive(state.pid) && (await viewerHealth(state))) return state;
+  if (await viewerHealth(state)) return state;
   removeViewerState(state.instanceId, file);
   return null;
 }
@@ -147,7 +162,7 @@ export async function waitForViewer(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const state = readViewerState(file);
-    if (state?.instanceId === instanceId && processIsAlive(state.pid) && (await viewerHealth(state))) {
+    if (state?.instanceId === instanceId && (await viewerHealth(state))) {
       return state;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -163,18 +178,27 @@ export async function stopViewer(
     removeViewerState(state.instanceId, file);
     return;
   }
-  try {
-    process.kill(state.pid, 'SIGTERM');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
-  }
+  if (process.platform === 'win32') {
+    try {
+      execSync(`taskkill /PID ${state.pid} /T /F`, { stdio: 'ignore' });
+    } catch {
+      try { process.kill(state.pid, 'SIGKILL'); } catch {}
+    }
+  } else {
+    try {
+      process.kill(state.pid, 'SIGTERM');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+    }
 
-  const deadline = Date.now() + 3000;
-  while (Date.now() < deadline && processIsAlive(state.pid)) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  if (processIsAlive(state.pid)) {
-    process.kill(state.pid, 'SIGKILL');
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && processIsAlive(state.pid)) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (processIsAlive(state.pid)) {
+      try { process.kill(state.pid, 'SIGKILL'); } catch {}
+    }
   }
   removeViewerState(state.instanceId, file);
 }
+
