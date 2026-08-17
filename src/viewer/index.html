@@ -2168,24 +2168,23 @@ function getProviderMeta(agentName, provider) {
   const an = (agentName || '').toLowerCase();
   const pr = (provider || '').toLowerCase();
 
-  if (an.includes('claude') || an.includes('anthropic') || pr.includes('anthropic') || pr.includes('claude')) {
-    return PROVIDER_METADATA.claude;
-  }
-  if (an.includes('copilot') || pr.includes('github') || pr.includes('copilot')) {
-    return PROVIDER_METADATA.github;
-  }
-  if (an.includes('gemini') || an.includes('antigravity') || pr.includes('google')) {
-    return PROVIDER_METADATA.google;
-  }
-  if (an.includes('cursor') || pr.includes('cursor')) {
-    return PROVIDER_METADATA.cursor;
-  }
-  if (an.includes('codex') || an.includes('gpt') || pr.includes('openai')) {
-    return PROVIDER_METADATA.openai;
-  }
-  if (an.includes('human') || pr.includes('human')) {
-    return PROVIDER_METADATA.human;
-  }
+  // The agent NAME identifies the tool and must win over the model's provider:
+  // Cursor running a Claude model records provider 'anthropic' but is still
+  // Cursor, so it must not resolve to the Claude icon.
+  if (an.includes('cursor')) return PROVIDER_METADATA.cursor;
+  if (an.includes('copilot')) return PROVIDER_METADATA.github;
+  if (an.includes('antigravity') || an.includes('gemini')) return PROVIDER_METADATA.google;
+  if (an.includes('codex') || an.includes('gpt')) return PROVIDER_METADATA.openai;
+  if (an.includes('claude') || an.includes('anthropic')) return PROVIDER_METADATA.claude;
+  if (an.includes('human')) return PROVIDER_METADATA.human;
+
+  // Only when the name isn't a known tool do we fall back to the model provider.
+  if (pr.includes('cursor')) return PROVIDER_METADATA.cursor;
+  if (pr.includes('github') || pr.includes('copilot')) return PROVIDER_METADATA.github;
+  if (pr.includes('google')) return PROVIDER_METADATA.google;
+  if (pr.includes('openai')) return PROVIDER_METADATA.openai;
+  if (pr.includes('anthropic') || pr.includes('claude')) return PROVIDER_METADATA.claude;
+  if (pr.includes('human')) return PROVIDER_METADATA.human;
   return PROVIDER_METADATA.other;
 }
 
