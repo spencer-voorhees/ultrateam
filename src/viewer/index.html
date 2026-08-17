@@ -2788,16 +2788,18 @@ function buildWorkspaceNameIndex(d) {
 }
 
 // A thread is one branch of work inside one workspace. Keying by workspace+branch
-// keeps a "main" in project A distinct from a "main" in project B.
+// keeps a "main" in project A distinct from a "main" in project B. A workspace
+// with no git repo has no branch — those entries thread by workspace alone.
 function threadKey(projectPath, branch) {
-  return `${projectPath || ''}::${branch}`;
+  return `${projectPath || ''}::${branch || ''}`;
 }
 
 function renderThreadedFeed(entries, d) {
   const names = buildWorkspaceNameIndex(d);
   const groups = new Map();
   for (const e of entries) {
-    const branch = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : 'main';
+    // Keep a genuine null branch (non-git workspace) null — don't fabricate "main".
+    const branch = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : null;
     const key = threadKey(e.projectPath, branch);
     if (!groups.has(key)) groups.set(key, { branch, projectPath: e.projectPath, workspace: e.project || names.get(e.projectPath) || '', entries: [] });
     groups.get(key).entries.push(e);
@@ -2849,7 +2851,7 @@ function renderThreadGroup(g, d) {
     h('span', { class: 'thread-chevron' }, svgIcon('#icon-chevron', 14, 14)),
     h('span', { class: 'thread-head-labels' },
       g.workspace ? h('span', { class: 'thread-workspace' }, svgIcon('#icon-folder', 11, 11), h('span', {}, g.workspace)) : null,
-      h('span', { class: 'thread-branch' }, svgIcon('#icon-branch', 12, 12), h('span', {}, g.branch))
+      g.branch ? h('span', { class: 'thread-branch' }, svgIcon('#icon-branch', 12, 12), h('span', {}, g.branch)) : null
     ),
     h('span', { class: 'thread-relay' }, ...relayNodes),
     h('span', { class: 'thread-meta' },
