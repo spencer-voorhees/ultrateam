@@ -382,13 +382,9 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   flex-direction: column;
   background: var(--bg);
   border-left: 1px solid var(--border);
-  /* Layered shadows approximate a smooth gaussian falloff; a single large
-     shadow visibly bands/steps on some displays. */
-  box-shadow:
-    -1px 0 2px rgba(0, 0, 0, 0.06),
-    -6px 0 12px rgba(0, 0, 0, 0.08),
-    -16px 0 32px rgba(0, 0, 0, 0.10),
-    -32px 0 64px rgba(0, 0, 0, 0.12);
+  /* Low opacity is what avoids banding: the alpha ramp steps stay below one
+     8-bit level per pixel. High-opacity or stacked shadows show contour lines. */
+  box-shadow: -12px 0 44px rgba(0, 0, 0, 0.14);
   transform: translateX(100%);
   transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 }
