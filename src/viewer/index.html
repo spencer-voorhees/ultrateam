@@ -214,9 +214,11 @@ body.sidebar-shelved .nav-bar {
   gap: 0.55rem;
   padding: 0.42rem 0.6rem;
   color: var(--text-primary);
+  min-width: 0;
 }
 .top-nav-brand {
   display: flex;
+  min-width: 0;
 }
 /* The sidebar shows the app logo when open, so only surface the logo in the top
    bar once the sidebar is shelved; the workspace name is always shown. */
@@ -242,7 +244,7 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   letter-spacing: -0.025em;
   color: var(--text-primary);
   display: inline-block;
-  max-width: 42vw;
+  max-width: min(32vw, 260px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
