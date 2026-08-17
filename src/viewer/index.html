@@ -1797,6 +1797,9 @@ async function fetchState({ transition = false } = {}) {
   const params = new URLSearchParams();
   if (state.scope) params.set('project', state.scope);
   if (state.query) params.set('q', state.query);
+  // Reflect the current scope in the URL right away, so a reload restores the
+  // workspace you switched to — even when the fetch short-circuits on a cache hit.
+  syncUrl();
   const stream = $('#feed-stream');
 
   // Instant switch: if we've viewed this scope before, paint its cached content
