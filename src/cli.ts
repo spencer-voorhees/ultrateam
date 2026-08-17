@@ -448,6 +448,25 @@ program
       run('npm install --no-audit --no-fund');
       console.error('→ building');
       run('npm run build');
+      if (process.platform === 'win32') {
+        try {
+          const prefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+          const cliJs = path.join(pkgRoot, 'dist', 'cli.js');
+          for (const candidate of [
+            path.join(prefix, 'ultrateam.ps1'),
+            path.join(prefix, 'bin', 'ultrateam.ps1'),
+            ...(process.env.APPDATA ? [path.join(process.env.APPDATA, 'npm', 'ultrateam.ps1')] : []),
+          ]) {
+            if (fs.existsSync(candidate)) {
+              try { fs.unlinkSync(candidate); } catch {}
+            }
+          }
+          const cmdShim = path.join(prefix, 'ultrateam.cmd');
+          fs.writeFileSync(cmdShim, `@echo off\r\nnode "${cliJs}" %*\r\n`, 'ascii');
+        } catch {
+          // ignore shim cleanup failures during update
+        }
+      }
       console.error(`Updated ${before} → ${after}. Restart any running agents to pick it up.`);
     } catch (err) {
       console.error(`update failed: ${String(err)}`);

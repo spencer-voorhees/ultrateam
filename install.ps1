@@ -47,7 +47,51 @@ Npm "run build"
 Say "-> linking the ultrateam command"
 Npm "link"
 
+# npm link generates an unsigned ultrateam.ps1 shim in npm's global prefix.
+# In PowerShell, invoking 'ultrateam' resolves that .ps1 before ultrateam.cmd,
+# triggering PowerShell's ExecutionPolicy ("file is not digitally signed").
+# Remove ultrateam.ps1 and ensure a durable ultrateam.cmd shim exists so PowerShell
+# always uses .cmd (which is not subject to script signing policies).
+$npmPrefix = $null
+try {
+  $npmPrefix = (cmd /c "npm config get prefix").Trim()
+} catch {}
+if (-not $npmPrefix -and $env:APPDATA) {
+  $npmPrefix = Join-Path $env:APPDATA "npm"
+}
+
+if ($npmPrefix) {
+  # Remove any unsigned .ps1 shims
+  $psShim = Join-Path $npmPrefix "ultrateam.ps1"
+  if (Test-Path $psShim) { Remove-Item -Force $psShim -ErrorAction SilentlyContinue }
+  $psShimBin = Join-Path $npmPrefix "bin\ultrateam.ps1"
+  if (Test-Path $psShimBin) { Remove-Item -Force $psShimBin -ErrorAction SilentlyContinue }
+
+  # Ensure ultrateam.cmd exists and points directly to node + dist/cli.js
+  $cmdShim = Join-Path $npmPrefix "ultrateam.cmd"
+  $cliJs = Join-Path $dir "dist\cli.js"
+  "@echo off`r`nnode `"$cliJs`" %*" | Set-Content -Path $cmdShim -Encoding Ascii
+
+  # Ensure npm's prefix is on the persistent User PATH and current session PATH
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if (-not $userPath) {
+    [Environment]::SetEnvironmentVariable("Path", $npmPrefix, "User")
+  } elseif ($userPath -notlike "*$npmPrefix*") {
+    [Environment]::SetEnvironmentVariable("Path", "$npmPrefix;$userPath", "User")
+  }
+  if ($env:Path -notlike "*$npmPrefix*") {
+    $env:Path = "$npmPrefix;$env:Path"
+  }
+}
+
+# Also remove any other ultrateam.ps1 found on PATH
+$foundPs1 = Get-Command ultrateam.ps1 -ErrorAction SilentlyContinue
+if ($foundPs1 -and $foundPs1.Source -and (Test-Path $foundPs1.Source)) {
+  Remove-Item -Force $foundPs1.Source -ErrorAction SilentlyContinue
+}
+
 Say "ultrateam installed. Next: cd your-project; ultrateam init"
 if (-not (Get-Command ultrateam -ErrorAction SilentlyContinue)) {
   Write-Host "  note: reopen your terminal so 'ultrateam' is on PATH" -ForegroundColor Yellow
 }
+
