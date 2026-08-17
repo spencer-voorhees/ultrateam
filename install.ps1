@@ -85,9 +85,10 @@ if ($npmPrefix) {
 }
 
 # Also remove any other ultrateam.ps1 found on PATH
-$foundPs1 = Get-Command ultrateam.ps1 -ErrorAction SilentlyContinue
-if ($foundPs1 -and $foundPs1.Source -and (Test-Path $foundPs1.Source)) {
-  Remove-Item -Force $foundPs1.Source -ErrorAction SilentlyContinue
+Get-Command ultrateam.ps1 -All -ErrorAction SilentlyContinue | ForEach-Object {
+  if ($_.Source -and (Test-Path $_.Source)) {
+    Remove-Item -Force $_.Source -ErrorAction SilentlyContinue
+  }
 }
 
 Say "ultrateam installed. Next: cd your-project; ultrateam init"
