@@ -350,6 +350,188 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   padding: 0;
   border-radius: var(--radius-pill);
 }
+.usage-trigger {
+  gap: 0.4rem;
+  font-weight: 550;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.usage-trigger svg { color: var(--text-tertiary); }
+.usage-trigger:hover svg { color: var(--text-primary); }
+@media (max-width: 640px) { .usage-trigger span { display: none; } .usage-trigger { width: 36px; padding: 0; } }
+
+/* Usage drawer */
+.usage-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: color-mix(in srgb, #000 42%, transparent);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.usage-backdrop.open { opacity: 1; }
+.usage-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 91;
+  height: 100vh;
+  width: min(460px, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -18px 0 48px -24px rgba(0, 0, 0, 0.55);
+  transform: translateX(100%);
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.usage-drawer.open { transform: translateX(0); }
+.usage-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.25rem 0.5rem;
+}
+.usage-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+}
+.usage-drawer-title svg { color: var(--text-secondary); }
+.usage-drawer-actions { display: flex; align-items: center; gap: 0.25rem; }
+.usage-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.usage-icon-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+.usage-drawer-sub {
+  margin: 0;
+  padding: 0 1.25rem 0.75rem;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+}
+.usage-drawer-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.25rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.usage-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.usage-total-figure { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.usage-total-label { font-size: 0.72rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.usage-total-cost { font-size: 0.95rem; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.usage-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+  background: var(--card);
+}
+.usage-card.unavailable { opacity: 0.72; }
+.usage-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.7rem;
+}
+.usage-card-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--p-color, var(--text-primary));
+  background: color-mix(in srgb, var(--p-color, var(--text-primary)) 13%, transparent);
+}
+.usage-card-name { font-size: 0.88rem; font-weight: 650; color: var(--text-primary); }
+.usage-card-status {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.usage-card-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.usage-card-tokens { font-size: 1.15rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.usage-card-cost {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
+}
+.usage-card-meta { font-size: 0.72rem; color: var(--text-tertiary); margin-left: auto; }
+.usage-note { font-size: 0.76rem; color: var(--text-tertiary); line-height: 1.4; }
+
+/* daily sparkline */
+.usage-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+  margin: 0.55rem 0 0.7rem;
+}
+.usage-spark-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  background: color-mix(in srgb, var(--p-color, var(--accent, #3b82f6)) 60%, transparent);
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+}
+.usage-spark-bar:last-child { background: var(--p-color, var(--accent, #3b82f6)); }
+
+.usage-models { display: flex; flex-direction: column; gap: 0.3rem; }
+.usage-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.76rem;
+}
+.usage-model-name {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-model-tokens { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.usage-model-cost { color: var(--text-secondary); font-variant-numeric: tabular-nums; min-width: 54px; text-align: right; }
+.usage-empty { padding: 2rem 0; text-align: center; color: var(--text-tertiary); font-size: 0.82rem; }
 .sidebar-toggle-btn svg {
   width: 16px;
   height: 16px;
@@ -1655,13 +1837,26 @@ html.sidebar-resizing .nav-bar {
     <symbol id="icon-folder" viewBox="0 0 24 24">
       <path fill="currentColor" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
     </symbol>
-    <!-- Git Branch Icon -->
+    <!-- Git Branch Icon (Lucide git-branch) -->
     <symbol id="icon-branch" viewBox="0 0 24 24">
-      <path fill="currentColor" d="M6 3a3 3 0 1 0 2.83 4H15a3 3 0 0 1 3 3v4.17A3.001 3.001 0 1 0 20 17v-4a5 5 0 0 0-5-5H8.83A3.001 3.001 0 0 0 6 3zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm12 14a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM6 9a1 1 0 0 0-1 1v7.17a3.001 3.001 0 1 0 2 0V10a1 1 0 0 0-1-1zm0 10a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="6" y1="3" x2="6" y2="15"/>
+        <circle cx="18" cy="6" r="3"/>
+        <circle cx="6" cy="18" r="3"/>
+        <path d="M18 9a9 9 0 0 1-9 9"/>
+      </g>
     </symbol>
     <!-- File Icon -->
     <symbol id="icon-file" viewBox="0 0 24 24">
       <path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+    </symbol>
+    <!-- Usage / Bar Chart Icon (Lucide bar-chart-2) -->
+    <symbol id="icon-usage" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </g>
     </symbol>
     <!-- Search Icon -->
     <symbol id="icon-search" viewBox="0 0 24 24">
@@ -1735,6 +1930,10 @@ html.sidebar-resizing .nav-bar {
   </div>
 
   <div class="nav-right">
+    <button id="usage-btn" class="nav-btn usage-trigger" title="Token usage across your agents">
+      <svg viewBox="0 0 24 24" width="14" height="14"><use href="#icon-usage"/></svg>
+      <span>Usage</span>
+    </button>
     <button id="theme-btn" class="nav-btn icon-only" title="Toggle theme">
       <svg viewBox="0 0 24 24" width="13" height="13" id="theme-icon"><use href="#icon-sun"/></svg>
     </button>
@@ -1743,6 +1942,25 @@ html.sidebar-resizing .nav-bar {
 
 <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
 <div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (drag, or arrow keys; double-click to reset)" tabindex="0" title="Drag to resize · double-click to reset"></div>
+
+<!-- Usage Drawer -->
+<div class="usage-backdrop" id="usage-backdrop" hidden></div>
+<aside class="usage-drawer" id="usage-drawer" role="dialog" aria-modal="true" aria-labelledby="usage-drawer-title" hidden>
+  <div class="usage-drawer-head">
+    <div class="usage-drawer-title" id="usage-drawer-title">
+      <svg viewBox="0 0 24 24" width="16" height="16"><use href="#icon-usage"/></svg>
+      <span>Token usage</span>
+    </div>
+    <div class="usage-drawer-actions">
+      <button id="usage-refresh" class="usage-icon-btn" title="Refresh">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button id="usage-close" class="usage-icon-btn" title="Close" aria-label="Close usage">✕</button>
+    </div>
+  </div>
+  <p class="usage-drawer-sub">Read on demand from each tool's local logs — no accounts connected.</p>
+  <div class="usage-drawer-body" id="usage-drawer-body"></div>
+</aside>
 
 <!-- Main Workspace -->
 <div class="workspace" id="workspace-shell">
@@ -1982,6 +2200,120 @@ function fullDateTime(iso) {
   } catch {
     return iso;
   }
+}
+
+// ---- Usage drawer ------------------------------------------------------------
+const usageState = { loaded: false, loading: false, report: null };
+
+function fmtTokens(n) {
+  n = n || 0;
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(n >= 10_000 ? 0 : 1) + 'K';
+  return String(n);
+}
+function fmtUSD(n) {
+  if (n === null || n === undefined) return null;
+  if (n > 0 && n < 0.01) return '<$0.01';
+  return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function tokenTotal(t) { return (t.input || 0) + (t.output || 0) + (t.cacheWrite || 0) + (t.cacheRead || 0); }
+
+function openUsage() {
+  const drawer = $('#usage-drawer'), backdrop = $('#usage-backdrop');
+  drawer.hidden = false; backdrop.hidden = false;
+  requestAnimationFrame(() => { drawer.classList.add('open'); backdrop.classList.add('open'); });
+  $('#usage-close').focus();
+  if (!usageState.loaded) fetchUsage();
+  else renderUsage(usageState.report);
+}
+function closeUsage() {
+  const drawer = $('#usage-drawer'), backdrop = $('#usage-backdrop');
+  drawer.classList.remove('open'); backdrop.classList.remove('open');
+  setTimeout(() => { drawer.hidden = true; backdrop.hidden = true; }, 260);
+  const btn = $('#usage-btn'); if (btn) btn.focus();
+}
+async function fetchUsage() {
+  if (usageState.loading) return;
+  usageState.loading = true;
+  const body = $('#usage-drawer-body');
+  setChildren(body, h('div', { class: 'usage-empty' }, 'Reading local logs…'));
+  try {
+    const res = await fetch('/api/usage');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    usageState.report = await res.json();
+    usageState.loaded = true;
+    renderUsage(usageState.report);
+  } catch (err) {
+    setChildren(body, h('div', { class: 'usage-empty' }, 'Could not read usage: ' + err.message));
+  } finally {
+    usageState.loading = false;
+  }
+}
+
+function renderUsageCard(p) {
+  const meta = getProviderMeta(p.provider, p.provider);
+  const head = h('div', { class: 'usage-card-head' },
+    h('span', { class: 'usage-card-avatar', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 15, 15)),
+    h('span', { class: 'usage-card-name' }, p.label),
+    h('span', { class: 'usage-card-status' },
+      p.available
+        ? `${p.sessions} session${p.sessions === 1 ? '' : 's'}${p.lastActivity ? ' · ' + timeAgo(p.lastActivity) : ''}`
+        : 'no local data')
+  );
+  if (!p.available) {
+    return h('div', { class: 'usage-card unavailable', style: `--p-color:${meta.color};` },
+      head, h('div', { class: 'usage-note' }, p.note || 'No local usage logs found.'));
+  }
+  const cost = fmtUSD(p.cost);
+  const figure = h('div', { class: 'usage-card-figure' },
+    h('span', { class: 'usage-card-tokens' }, fmtTokens(tokenTotal(p.tokens)) + ' tokens'),
+    cost ? h('span', { class: 'usage-card-cost' }, cost + ' est') : null,
+    h('span', { class: 'usage-card-meta' }, `${p.messages} msg${p.messages === 1 ? '' : 's'}`)
+  );
+  // sparkline of the most recent days
+  let spark = null;
+  const days = (p.daily || []).filter((d) => d.date !== 'unknown').slice(-24);
+  if (days.length > 1) {
+    const max = Math.max(...days.map((d) => d.tokens), 1);
+    spark = h('div', { class: 'usage-spark', style: `--p-color:${meta.color};`, title: 'Daily tokens' },
+      ...days.map((d) => h('span', {
+        class: 'usage-spark-bar',
+        style: `height:${Math.max(6, Math.round((d.tokens / max) * 100))}%`,
+        title: `${d.date}: ${fmtTokens(d.tokens)}`,
+      })));
+  }
+  const models = h('div', { class: 'usage-models' },
+    ...(p.models || []).slice(0, 5).map((m) => {
+      const mc = fmtUSD(m.cost);
+      return h('div', { class: 'usage-model-row' },
+        h('span', { class: 'usage-model-name', title: m.model }, m.model),
+        h('span', { class: 'usage-model-tokens' }, fmtTokens(tokenTotal(m.tokens))),
+        h('span', { class: 'usage-model-cost' }, mc || '—')
+      );
+    }));
+  return h('div', { class: 'usage-card', style: `--p-color:${meta.color};` }, head, figure, spark, models);
+}
+
+function renderUsage(report) {
+  const body = $('#usage-drawer-body');
+  if (!report || !report.providers) {
+    setChildren(body, h('div', { class: 'usage-empty' }, 'No usage data.'));
+    return;
+  }
+  const avail = report.providers.filter((p) => p.available);
+  const grandTokens = avail.reduce((s, p) => s + tokenTotal(p.tokens), 0);
+  const anyCost = avail.some((p) => p.cost !== null);
+  const grandCost = anyCost ? avail.reduce((s, p) => s + (p.cost || 0), 0) : null;
+  const total = h('div', { class: 'usage-total' },
+    h('div', {},
+      h('div', { class: 'usage-total-figure' }, fmtTokens(grandTokens)),
+      h('div', { class: 'usage-total-label' }, 'tokens across ' + avail.length + ' tool' + (avail.length === 1 ? '' : 's'))
+    ),
+    grandCost !== null ? h('div', { class: 'usage-total-cost' }, fmtUSD(grandCost) + ' est') : null
+  );
+  // available first, then the rest
+  const ordered = [...report.providers].sort((a, b) => (b.available - a.available) || (tokenTotal(b.tokens) - tokenTotal(a.tokens)));
+  setChildren(body, total, ...ordered.map(renderUsageCard));
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2950,6 +3282,15 @@ mobileSidebarQuery.addEventListener('change', () => {
 });
 
 $('#theme-btn').addEventListener('click', toggleTheme);
+
+// ---- Usage drawer wiring ----
+$('#usage-btn').addEventListener('click', openUsage);
+$('#usage-close').addEventListener('click', closeUsage);
+$('#usage-backdrop').addEventListener('click', closeUsage);
+$('#usage-refresh').addEventListener('click', () => { usageState.loaded = false; fetchUsage(); });
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !$('#usage-drawer').hidden) { ev.preventDefault(); closeUsage(); }
+});
 
 try {
   const savedTheme = localStorage.getItem('ut-theme');
