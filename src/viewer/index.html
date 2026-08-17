@@ -1097,6 +1097,17 @@ body.sidebar-shelved .sidebar {
   padding: 0;
   justify-content: center;
 }
+.panel-body {
+  position: relative;
+}
+.panel-copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
 .collapse-icon {
   display: inline-flex;
   transform: rotate(180deg);
@@ -2078,16 +2089,16 @@ function renderCardPanel(entry, panel) {
       ? { title: 'Entry details', text: detailsText, copyLabel: 'Copy details' }
       : { title: 'Commands', text: '', copyLabel: '' };
 
+  const content = panel === 'details'
+    ? renderEntryDetails(entry)
+    : isCommands
+      ? renderCommands(entry)
+      : h('pre', { class: 'code-container' }, config.text);
+
   return h('section', { class: 'card-inline-panel', 'data-panel': panel },
     h('div', { class: 'inline-panel-header' },
       h('h4', { class: 'inline-panel-title' }, config.title),
       h('div', { class: 'inline-panel-actions' },
-        !isCommands ? h('button', {
-          class: 'action-pill-btn panel-icon-btn',
-          title: config.copyLabel,
-          'aria-label': config.copyLabel,
-          onclick: () => copyText(config.text, `${config.copyLabel.replace('Copy ', '')} copied`),
-        }, svgIcon('#icon-copy', 12, 12)) : null,
         h('button', {
           class: 'action-pill-btn panel-icon-btn',
           title: `Collapse ${config.title.toLowerCase()}`,
@@ -2096,11 +2107,16 @@ function renderCardPanel(entry, panel) {
         }, h('span', { class: 'collapse-icon' }, svgIcon('#icon-chevron', 14, 14)))
       )
     ),
-    panel === 'details'
-      ? renderEntryDetails(entry)
-      : isCommands
-        ? renderCommands(entry)
-        : h('pre', { class: 'code-container' }, config.text)
+    // Copy lives inside the content card (top-right), not in the panel header.
+    h('div', { class: 'panel-body' },
+      !isCommands ? h('button', {
+        class: 'action-pill-btn panel-icon-btn panel-copy-btn',
+        title: config.copyLabel,
+        'aria-label': config.copyLabel,
+        onclick: () => copyText(config.text, `${config.copyLabel.replace('Copy ', '')} copied`),
+      }, svgIcon('#icon-copy', 12, 12)) : null,
+      content
+    )
   );
 }
 
