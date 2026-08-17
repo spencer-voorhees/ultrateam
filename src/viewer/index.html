@@ -1830,7 +1830,11 @@ function deriveScopedView(source, scopeId) {
 async function warmAllCache() {
   try {
     const res = await fetch('/api/state?project=all');
-    if (res.ok) sessionStorage.setItem('ut-state-cache:all', await res.text());
+    if (res.ok) {
+      sessionStorage.setItem('ut-state-cache:all', await res.text());
+      // The snapshot is now available, so the roster can show the full agent union.
+      if (state.data) renderRoster(state.data);
+    }
   } catch (e) {}
 }
 
@@ -1989,10 +1993,11 @@ function getAllAgentsUnion(d) {
     if (!k) return;
     const cur = merged.get(k);
     if (!cur) {
-      merged.set(k, { key: k, name: a.name, provider: a.meta?.provider || a.provider, order: fromSnapshot ? (a.count || 0) : 0 });
+      merged.set(k, { key: k, name: a.name, display: a.meta?.display, provider: a.meta?.provider || a.provider, order: fromSnapshot ? (a.count || 0) : 0 });
     } else {
       if (fromSnapshot) cur.order = a.count || 0;
       if (!/[A-Z]/.test(cur.name) && /[A-Z]/.test(a.name)) cur.name = a.name; // prefer "Cursor" over "cursor"
+      if (!cur.display && a.meta?.display) cur.display = a.meta.display; // pretty name from the server
       if (!cur.provider) cur.provider = a.meta?.provider || a.provider;
     }
   };
@@ -2029,11 +2034,13 @@ function renderRoster(d) {
     return;
   }
 
-  // Per-scope counts, matched case-insensitively (summing any case-variants).
+  // Per-scope counts from the entries actually loaded for this scope, so the
+  // number next to an agent matches what you see when you filter to it.
   const scopeCounts = new Map();
-  for (const a of (d.agents || [])) {
-    const k = agentKey(a.name);
-    scopeCounts.set(k, (scopeCounts.get(k) || 0) + (a.count || 0));
+  for (const e of (d.entries || [])) {
+    const k = agentKey(e.agent && e.agent.name);
+    if (!k) continue;
+    scopeCounts.set(k, (scopeCounts.get(k) || 0) + 1);
   }
 
   const agentItems = union.map((a) => {
@@ -2054,7 +2061,7 @@ function renderRoster(d) {
           svgIcon(meta.icon, 13, 13)
         ),
         h('div', { style: 'min-width:0;' },
-          h('div', { class: 'agent-name-text' }, getAgentDisplayName(a.name, undefined, meta))
+          h('div', { class: 'agent-name-text' }, getAgentDisplayName(a.name, a.display, meta))
         )
       ),
       h('span', { class: 'nav-count-pill' }, String(count))
@@ -2070,8 +2077,11 @@ function renderProjectNav(d) {
     setChildren(list, h('div', { class: 'nav-empty-state' }, 'No workspaces yet'));
     return;
   }
+  // "All" shows the total across every workspace (stable), not the current
+  // scope's count — otherwise it changed every time you switched workspaces.
+  const totalAcrossWorkspaces = d.projects.reduce((n, p) => n + (p.count || 0), 0);
   const items = [
-    { id: 'all', name: 'All', count: d.stats.entries },
+    { id: 'all', name: 'All', count: totalAcrossWorkspaces },
     ...d.projects,
   ];
 
