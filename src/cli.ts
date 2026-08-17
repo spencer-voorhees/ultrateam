@@ -447,7 +447,7 @@ program
 program
   .command('update')
   .description('Update ultrateam to the latest (git pull + rebuild its install)')
-  .action(() => {
+  .action(async () => {
     // The CLI runs from <install>/dist/cli.js, so the package root is one level up.
     const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     if (!fs.existsSync(path.join(pkgRoot, '.git'))) {
@@ -492,7 +492,26 @@ program
           // ignore shim cleanup failures during update
         }
       }
-      console.error(`Updated ${before} → ${after}. Restart any running agents to pick it up.`);
+      console.error(`Updated ${before} → ${after}.`);
+      // Restart the viewer in place so it serves the freshly built assets/server.
+      try {
+        const running = await runningViewer();
+        if (running) {
+          console.error('→ restarting the viewer');
+          await stopViewer(running);
+          const cliJs = fileURLToPath(import.meta.url);
+          spawn(process.execPath, [cliJs, 'view', '--port', String(running.port), '--no-open'], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true,
+          }).unref();
+          console.error(`Viewer restarted at ${running.url}.`);
+        } else {
+          console.error('Restart any running agents to pick up the update.');
+        }
+      } catch (restartErr) {
+        console.error(`(couldn't auto-restart the viewer: ${String(restartErr)} — run \`ultrateam view\` to restart it.)`);
+      }
     } catch (err) {
       console.error(`update failed: ${String(err)}`);
       process.exit(1);
