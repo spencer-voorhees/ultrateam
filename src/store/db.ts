@@ -325,7 +325,12 @@ export class Index {
       this.db.prepare(`DELETE FROM entries WHERE project_path = ?`).run(projectRoot);
       for (const entry of entries) this.upsertRow(entry, projectRoot, workspaceId);
     });
-    registerRoot(projectRoot, this.rootsPath);
+    // A workspace only exists once it holds real memory. Merely running a
+    // command (or launching the viewer) from a directory must not create an
+    // empty workspace; if one was registered before but has no entries now,
+    // drop it so it stops showing up.
+    if (entries.length > 0) registerRoot(projectRoot, this.rootsPath);
+    else unregisterRoot(projectRoot, this.rootsPath);
     return { indexed: entries.length, skipped };
   }
 

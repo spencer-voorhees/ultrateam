@@ -75,7 +75,7 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     // Launch into the workspace the command was run from. The global index can
     // contain legitimate history from many projects, but presenting all of it
     // on first launch makes that history look like bundled/demo content.
-    const scope = requestedScope === 'all'
+    let scope = requestedScope === 'all'
       ? null
       : (requestedScope ?? startWorkspace);
 
@@ -96,8 +96,10 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     }
 
     const projects = index.projectSummaries();
-    // Registered roots are workspace truth even before their first entry.
-    // Group empty clones by stable workspace id just like populated projects.
+    // A workspace only exists once it holds real memory (an entry). Merge any
+    // known sibling clone roots into a populated workspace, but never synthesize
+    // an empty workspace from a registered-but-empty root — running a command or
+    // launching the viewer from a directory must not create a phantom workspace.
     const rootsByWorkspace = new Map<string, string[]>();
     for (const [root, id] of rootAliases) {
       const workspaceRoots = rootsByWorkspace.get(id) ?? [];
@@ -107,28 +109,16 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
     for (const project of projects) {
       project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
     }
-    for (const [id, workspaceRoots] of rootsByWorkspace) {
-      if (projects.some((project) => project.id === id)) continue;
-      const representative = workspaceRoots[0];
-      projects.push({
-        id,
-        path: representative,
-        name: path.basename(representative),
-        count: 0,
-        lastTs: '',
-        roots: [...workspaceRoots].sort(),
-      });
-    }
     projects.sort((a, b) => b.lastTs.localeCompare(a.lastTs) || a.name.localeCompare(b.name));
     if (scope && !projects.some((p) => p.id === scope)) {
-      projects.unshift({
-        id: scope,
-        path: '',
-        name: 'Workspace',
-        count: 0,
-        lastTs: '',
-        roots: [],
-      });
+      // The scoped workspace has no memory yet. Only show an empty placeholder
+      // when the user explicitly navigated to it; if we merely defaulted to the
+      // launch directory, present everything instead of inventing a workspace.
+      if (requestedScope && requestedScope !== 'all') {
+        projects.unshift({ id: scope, path: '', name: 'Workspace', count: 0, lastTs: '', roots: [] });
+      } else {
+        scope = null;
+      }
     }
 
     // Workspace names are first-class search targets. An exact name query is

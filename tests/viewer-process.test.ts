@@ -6,7 +6,8 @@ import path from 'node:path';
 import net from 'node:net';
 import { startViewer } from '../src/viewer/server.js';
 import { registerRoot } from '../src/store/roots.js';
-import { STORE_DIR } from '../src/store/jsonl.js';
+import { STORE_DIR, appendEntry } from '../src/store/jsonl.js';
+import { createEntry } from '../src/schema.js';
 import {
   processIsAlive,
   readViewerState,
@@ -75,25 +76,29 @@ test('runningViewer clears stale state without signaling an unrelated process', 
   assert.equal(fs.existsSync(file), false);
 });
 
-test('viewer /api/state defaults to its launch workspace and supports explicit all', async () => {
+test('viewer /api/state defaults to its launch workspace when it has memory, and supports explicit all', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-viewer-scope-'));
-  fs.mkdirSync(path.join(root, '.ultrateam'));
+  // A populated workspace at the launch directory — the viewer should scope to it.
+  appendEntry(root, createEntry({
+    project: path.basename(root),
+    agent: { name: 'claude-code', model: 'claude-fable-5' },
+    title: 'Launch entry',
+    summary: 'Gives the launch workspace real memory.',
+  }));
   const handle = await startViewer({ port: 0, cwd: root, instanceId: 'scope-test-viewer' });
   try {
     const launchState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
     assert.notEqual(launchState.scope, 'all');
     assert.ok(launchState.projects.some((project: { id: string }) => project.id === launchState.scope));
     assert.ok(Array.isArray(launchState.entries));
-    assert.equal(launchState.entries.length, 0);
+    assert.equal(launchState.entries.length, 1);
 
     const explicitAllState = await fetch(`${handle.url}/api/state?project=all`).then((r) => r.json());
     assert.equal(explicitAllState.scope, 'all');
 
-    if (launchState.projects.length > 0) {
-      const firstProjectId = launchState.projects[0].id;
-      const scopedState = await fetch(`${handle.url}/api/state?project=${encodeURIComponent(firstProjectId)}`).then((r) => r.json());
-      assert.equal(scopedState.scope, firstProjectId);
-    }
+    const firstProjectId = launchState.projects[0].id;
+    const scopedState = await fetch(`${handle.url}/api/state?project=${encodeURIComponent(firstProjectId)}`).then((r) => r.json());
+    assert.equal(scopedState.scope, firstProjectId);
 
     const iconRes = await fetch(`${handle.url}/ultrateam-icon.png`);
     assert.equal(iconRes.status, 200);
@@ -124,14 +129,28 @@ test('viewer supports first launch before any workspace exists', async () => {
     assert.deepEqual(emptyState.entries, []);
     assert.equal(emptyState.stats.entries, 0);
 
+    // A workspace surfaces once it holds real memory.
     const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-new-workspace-'));
-    fs.mkdirSync(path.join(project, STORE_DIR), { recursive: true });
+    appendEntry(project, createEntry({
+      project: path.basename(project),
+      agent: { name: 'claude-code', model: 'claude-fable-5' },
+      title: 'First entry',
+      summary: 'A workspace exists once it has memory.',
+    }));
     registerRoot(project, path.join(home, '.ultrateam', 'projects.json'));
     const initializedState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
     assert.equal(initializedState.projects.length, 1);
     assert.equal(initializedState.projects[0].path, project);
     assert.equal(initializedState.projects[0].name, path.basename(project));
-    assert.equal(initializedState.projects[0].count, 0);
+    assert.equal(initializedState.projects[0].count, 1);
+
+    // Merely registering an empty root must NOT surface a workspace — only memory counts.
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-empty-ws-'));
+    fs.mkdirSync(path.join(empty, STORE_DIR), { recursive: true });
+    registerRoot(empty, path.join(home, '.ultrateam', 'projects.json'));
+    const afterEmpty = await fetch(`${handle.url}/api/state`).then((r) => r.json());
+    assert.ok(!afterEmpty.projects.some((p: { path: string }) => p.path === empty));
+    assert.equal(afterEmpty.projects.length, 1);
 
     const html = await fetch(handle.url).then((r) => r.text());
     assert.ok(html.includes('No workspaces yet'));

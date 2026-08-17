@@ -457,48 +457,6 @@ html.sidebar-resizing .nav-bar {
   transition: none;
 }
 
-/* ============================================================
-   Inline workspace rename (pencil edit-in-place)
-   ============================================================ */
-.workspace-rename-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
-}
-.workspace-rename-btn[hidden] {
-  display: none;
-}
-.top-nav-brand:hover .workspace-rename-btn,
-.workspace-rename-btn:focus-visible {
-  opacity: 1;
-}
-.workspace-rename-btn:hover {
-  background: var(--surface);
-  color: var(--text-primary);
-}
-.workspace-rename-input {
-  min-width: 8ch;
-  max-width: 42vw;
-  background: var(--surface);
-  border: 1px solid var(--accent-blue);
-  border-radius: 6px;
-  padding: 0.1rem 0.4rem;
-  margin: -0.1rem 0;
-  outline: none;
-}
-.workspace-rename-input[hidden] {
-  display: none;
-}
 
 .sidebar-header {
   height: 56px;
@@ -1194,18 +1152,6 @@ html.sidebar-resizing .nav-bar {
   padding: 0;
   justify-content: center;
 }
-/* Thin, styled scrollbar so a scrolling code box has a predictable gutter. */
-.code-container::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
-}
-.code-container::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 5px;
-}
-.code-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
 .collapse-icon {
   display: inline-flex;
   transform: rotate(180deg);
@@ -1219,7 +1165,6 @@ html.sidebar-resizing .nav-bar {
 .card-inline-panel .code-container {
   max-height: 420px;
   overflow: auto;
-  scrollbar-gutter: stable;
 }
 .card-inline-panel .toggle-block {
   margin-top: 0;
@@ -1551,11 +1496,6 @@ html.sidebar-resizing .nav-bar {
     <symbol id="icon-chevron" viewBox="0 0 24 24">
       <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
-    <!-- Pencil / Edit -->
-    <symbol id="icon-pencil" viewBox="0 0 24 24">
-      <path d="M12 20h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
   </defs>
 </svg>
 
@@ -1574,10 +1514,6 @@ html.sidebar-resizing .nav-bar {
     <div class="app-brand top-nav-brand">
       <img class="ultrateam-logo-icon" src="/ultrateam-icon.png" alt="" aria-hidden="true" draggable="false">
       <span class="ultrateam-logo-text" id="top-workspace">Workspace</span>
-      <input class="ultrateam-logo-text workspace-rename-input" id="workspace-rename-input" type="text" spellcheck="false" autocomplete="off" aria-label="Workspace display name" hidden>
-      <button id="rename-workspace-btn" class="workspace-rename-btn" type="button" title="Rename workspace" aria-label="Rename workspace" hidden>
-        <svg viewBox="0 0 24 24" width="12" height="12"><use href="#icon-pencil"/></svg>
-      </button>
     </div>
   </div>
 
@@ -1771,22 +1707,6 @@ function getAgentDisplayName(agentName, displayName, providerMeta) {
   return displayName || agentName;
 }
 
-// Per-workspace display-name overrides for the viewer. Stored in localStorage
-// (this browser only); the server name (folder basename) stays the default.
-const WS_NAMES_KEY = 'ut-workspace-names';
-function getWorkspaceNameOverrides() {
-  try { return JSON.parse(localStorage.getItem(WS_NAMES_KEY) || '{}') || {}; }
-  catch { return {}; }
-}
-function saveWorkspaceNameOverrides(map) {
-  try { localStorage.setItem(WS_NAMES_KEY, JSON.stringify(map)); } catch {}
-}
-function workspaceDisplayName(project) {
-  if (!project) return '';
-  const ov = getWorkspaceNameOverrides()[project.id];
-  return (ov && ov.trim()) ? ov : project.name;
-}
-
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -1935,7 +1855,14 @@ function render({ animateStats = false } = {}) {
   updateThemeIcon();
   requestAnimationFrame(() => state.newEntryIds.clear());
 
-  updateWorkspaceHeader(d);
+  const scoped = d.projects.find((p) => p.id === d.scope);
+  const currentProjectName = d.projects.length === 0
+    ? 'No workspaces yet'
+    : d.scope === 'all'
+      ? 'All Workspaces'
+      : (scoped ? scoped.name : 'Workspace');
+  $('#top-workspace').textContent = currentProjectName;
+  document.title = `ultrateam — ${currentProjectName}`;
 }
 
 function renderOverview(d, { animateStats = false } = {}) {
@@ -2036,7 +1963,7 @@ function renderProjectNav(d) {
     },
       h('div', { class: 'nav-item-left' },
         svgIcon('#icon-folder', 13, 13),
-        h('span', { class: 'nav-item-label' }, p.id === 'all' ? p.name : workspaceDisplayName(p))
+        h('span', { class: 'nav-item-label' }, p.name)
       ),
       h('span', { class: 'nav-count-pill' }, String(p.count || 0))
     );
@@ -2522,67 +2449,6 @@ try {
   updateThemeIcon();
   updateSidebarToggle();
 } catch {}
-
-// ---- Inline workspace rename (pencil, edit in place) ----
-// The header text and pencil are set from render() via updateWorkspaceHeader().
-// Editing commits only on Enter/blur, so nothing re-renders while typing.
-let renamingActive = false;
-const renameBtn = $('#rename-workspace-btn');
-const renameInput = $('#workspace-rename-input');
-const topWorkspace = $('#top-workspace');
-
-function updateWorkspaceHeader(d) {
-  const scoped = d.projects.find((p) => p.id === d.scope);
-  const name = d.projects.length === 0
-    ? 'No workspaces yet'
-    : d.scope === 'all'
-      ? 'All Workspaces'
-      : (scoped ? workspaceDisplayName(scoped) : 'Workspace');
-  document.title = `ultrateam — ${name}`;
-  if (renamingActive) return;
-  topWorkspace.textContent = name;
-  const editable = !!scoped && d.scope !== 'all';
-  renameBtn.hidden = !editable;
-  renameBtn.dataset.wsId = editable ? scoped.id : '';
-  renameBtn.dataset.wsDefault = editable ? scoped.name : '';
-}
-
-function beginRenameWorkspace() {
-  if (!renameBtn.dataset.wsId) return;
-  renamingActive = true;
-  renameInput.value = topWorkspace.textContent;
-  topWorkspace.hidden = true;
-  renameBtn.hidden = true;
-  renameInput.hidden = false;
-  renameInput.focus();
-  renameInput.select();
-}
-
-function commitRenameWorkspace(save) {
-  const id = renameBtn.dataset.wsId;
-  if (save && id) {
-    const map = getWorkspaceNameOverrides();
-    const v = renameInput.value.trim();
-    const def = renameBtn.dataset.wsDefault || '';
-    if (v && v !== def) map[id] = v;
-    else delete map[id];
-    saveWorkspaceNameOverrides(map);
-  }
-  renamingActive = false;
-  renameInput.hidden = true;
-  topWorkspace.hidden = false;
-  if (state.data) {
-    updateWorkspaceHeader(state.data);
-    renderProjectNav(state.data);
-  }
-}
-
-renameBtn.addEventListener('click', beginRenameWorkspace);
-renameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); commitRenameWorkspace(true); }
-  else if (e.key === 'Escape') { e.preventDefault(); commitRenameWorkspace(false); }
-});
-renameInput.addEventListener('blur', () => { if (renamingActive) commitRenameWorkspace(true); });
 
 // ---- Sidebar resize ----
 const SIDEBAR_MIN = 200, SIDEBAR_MAX = 480, SIDEBAR_DEFAULT = 260;
