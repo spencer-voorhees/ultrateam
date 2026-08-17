@@ -729,6 +729,96 @@ html.sidebar-resizing .nav-bar {
   padding-bottom: 0;
 }
 
+/* Timeline / Threads segmented toggle */
+.feed-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-subtle, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+.feed-view-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 550;
+  padding: 0.28rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.feed-view-btn:hover { color: var(--text-primary); }
+.feed-view-btn.active {
+  background: var(--card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Work-thread groups (branch-based) */
+.thread-group {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.thread-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+}
+.thread-head:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.thread-branch {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.thread-relay {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.thread-relay .agent-icon-badge { width: 18px; height: 18px; }
+.thread-relay-arrow { color: var(--text-tertiary); font-size: 0.7rem; margin: 0 1px; }
+.thread-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  flex: 0 0 auto;
+}
+.thread-chevron { display: inline-flex; transition: transform 0.16s ease; }
+.thread-group.collapsed .thread-chevron { transform: rotate(-90deg); }
+.thread-body { padding: 0 0.6rem 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.thread-group.collapsed .thread-body { display: none; }
+.thread-pass {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0.3rem 0.1rem 0.7rem;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+.thread-pass .agent-icon-badge { width: 15px; height: 15px; }
+
 .views-tabs {
   display: inline-flex;
   align-items: center;
@@ -1615,6 +1705,10 @@ html.sidebar-resizing .nav-bar {
           <span class="view-tab-count" id="badge-note"><span class="skeleton-shimmer skeleton-badge"></span></span>
         </button>
       </div>
+      <div class="feed-view-toggle" role="group" aria-label="Feed layout">
+        <button class="feed-view-btn active" data-view="timeline" type="button" title="Flat timeline">Timeline</button>
+        <button class="feed-view-btn" data-view="threads" type="button" title="Group into work threads by branch">Threads</button>
+      </div>
     </div>
 
     <!-- Feed Stream -->
@@ -1656,6 +1750,7 @@ const state = {
   rawPayload: '',
   seq: 0,
   newEntryIds: new Set(),
+  feedView: (() => { try { return localStorage.getItem('ut-feed-view') === 'threads' ? 'threads' : 'timeline'; } catch { return 'timeline'; } })(),
 };
 
 const PROVIDER_METADATA = {
@@ -2159,7 +2254,82 @@ function renderFeed(d, { animateStats = false } = {}) {
     return;
   }
 
-  setChildren(stream, entries.map((entry) => renderCard(entry, d)));
+  if (state.feedView === 'threads') {
+    setChildren(stream, renderThreadedFeed(entries, d));
+  } else {
+    setChildren(stream, entries.map((entry) => renderCard(entry, d)));
+  }
+}
+
+// Group entries into work threads by branch (the natural line of work), newest
+// thread first, entries within a thread oldest-first so the relay reads top-down.
+function renderThreadedFeed(entries, d) {
+  const groups = new Map();
+  for (const e of entries) {
+    const key = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : 'main';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+  const groupArr = [...groups.entries()].map(([branch, es]) => {
+    const sorted = [...es].sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+    const lastTs = es.reduce((m, e) => ((e.ts || '') > m ? (e.ts || '') : m), '');
+    const seen = new Set();
+    const relay = [];
+    for (const e of sorted) {
+      const nm = e.agent && e.agent.name;
+      if (nm && !seen.has(agentKey(nm))) { seen.add(agentKey(nm)); relay.push(e.agent); }
+    }
+    return { branch, entries: sorted, lastTs, relay };
+  }).sort((a, b) => b.lastTs.localeCompare(a.lastTs));
+  return groupArr.map((g) => renderThreadGroup(g, d));
+}
+
+function renderThreadGroup(g, d) {
+  const collapsed = state.collapsedThreads && state.collapsedThreads.has(g.branch);
+  const relayNodes = [];
+  g.relay.forEach((agent, i) => {
+    const meta = getProviderMeta(agent && agent.name, agent && agent.provider);
+    if (i > 0) relayNodes.push(h('span', { class: 'thread-relay-arrow' }, '→'));
+    relayNodes.push(h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};`, title: getAgentDisplayName(agent && agent.name, agent && agent.meta && agent.meta.display, meta) }, svgIcon(meta.icon, 12, 12)));
+  });
+  const handoffs = g.entries.filter((e) => e.kind === 'handoff').length;
+  const head = h('button', { class: 'thread-head', type: 'button', onclick: () => toggleThread(g.branch) },
+    h('span', { class: 'thread-chevron' }, svgIcon('#icon-chevron', 14, 14)),
+    svgIcon('#icon-branch', 13, 13),
+    h('span', { class: 'thread-branch' }, g.branch),
+    h('span', { class: 'thread-relay' }, ...relayNodes),
+    h('span', { class: 'thread-meta' },
+      handoffs > 0 ? h('span', {}, `${handoffs} handoff${handoffs === 1 ? '' : 's'}`) : null,
+      h('span', {}, `${g.entries.length} entr${g.entries.length === 1 ? 'y' : 'ies'}`),
+      h('span', {}, timeAgo(g.lastTs))
+    )
+  );
+  const body = [];
+  let prevKey = null;
+  for (const e of g.entries) {
+    const k = agentKey(e.agent && e.agent.name);
+    if (prevKey && k && k !== prevKey) {
+      const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
+      body.push(h('div', { class: 'thread-pass' },
+        h('span', { class: 'thread-relay-arrow' }, '↳'),
+        h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 11, 11)),
+        h('span', {}, `${getAgentDisplayName(e.agent && e.agent.name, e.agent && e.agent.meta && e.agent.meta.display, meta)} picked up`)
+      ));
+    }
+    body.push(renderCard(e, d));
+    prevKey = k || prevKey;
+  }
+  return h('div', { class: `thread-group ${collapsed ? 'collapsed' : ''}` },
+    head,
+    h('div', { class: 'thread-body' }, ...body)
+  );
+}
+
+function toggleThread(branch) {
+  if (!state.collapsedThreads) state.collapsedThreads = new Set();
+  if (state.collapsedThreads.has(branch)) state.collapsedThreads.delete(branch);
+  else state.collapsedThreads.add(branch);
+  render();
 }
 
 function renderCard(entry, d) {
@@ -2468,6 +2638,18 @@ $$('.view-tab-btn').forEach((btn) => {
     $$('.view-tab-btn').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     state.kindFilter = btn.dataset.kind;
+    renderWithFeedTransition();
+  });
+});
+
+// Timeline / Threads toggle
+$$('.feed-view-btn').forEach((btn) => {
+  btn.classList.toggle('active', btn.dataset.view === state.feedView);
+  btn.addEventListener('click', () => {
+    if (state.feedView === btn.dataset.view) return;
+    $$('.feed-view-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    state.feedView = btn.dataset.view;
+    try { localStorage.setItem('ut-feed-view', state.feedView); } catch {}
     renderWithFeedTransition();
   });
 });
