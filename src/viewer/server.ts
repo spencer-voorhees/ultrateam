@@ -44,8 +44,20 @@ function json(res: http.ServerResponse, status: number, body: unknown, headOnly:
 const REINDEX_INTERVAL_MS = 5000;
 const lastIndexed = new Map<string, number>();
 
-function handleState(url: URL, startRoot: string | null, res: http.ServerResponse, headOnly: boolean = false): void {
-  const index = new Index();
+// workspaceIdentity() spawns several git subprocesses per root; recomputing it
+// for every known root on every /api/state call cost ~200ms. Identity is stable
+// for a repo, so memoize it for the life of the viewer process.
+const identityCache = new Map<string, string>();
+function cachedWorkspaceId(root: string): string {
+  let id = identityCache.get(root);
+  if (id === undefined) {
+    id = workspaceIdentity(root).id;
+    identityCache.set(root, id);
+  }
+  return id;
+}
+
+function handleState(index: Index, url: URL, startRoot: string | null, res: http.ServerResponse, headOnly: boolean = false): void {
   try {
     const requested = url.searchParams.get('project');
     const q = url.searchParams.get('q')?.trim() ?? '';
@@ -61,7 +73,7 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
       lastIndexed.delete(root);
     }
     const roots = candidateRoots.filter((root) => !isUltrateamInstallDirectory(root));
-    const rootAliases = new Map(roots.map((root) => [root, workspaceIdentity(root).id]));
+    const rootAliases = new Map(roots.map((root) => [root, cachedWorkspaceId(root)]));
     const allowed = new Set<string>(index.projectSummaries().map((p) => p.id));
     for (const id of rootAliases.values()) allowed.add(id);
     const requestedScope = requested && requested !== 'all'
@@ -71,7 +83,7 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
       json(res, 400, { error: 'unknown project' }, headOnly);
       return;
     }
-    const startWorkspace = startRoot ? workspaceIdentity(startRoot).id : null;
+    const startWorkspace = startRoot ? cachedWorkspaceId(startRoot) : null;
     // Launch into the workspace the command was run from. The global index can
     // contain legitimate history from many projects, but presenting all of it
     // on first launch makes that history look like bundled/demo content.
@@ -167,8 +179,9 @@ function handleState(url: URL, startRoot: string | null, res: http.ServerRespons
         meta: agentMeta(r.entry.agent.name),
       })),
     }, headOnly);
-  } finally {
-    index.close();
+  } catch (err) {
+    if (!res.headersSent) json(res, 500, { error: String(err) }, headOnly);
+    else res.end();
   }
 }
 
@@ -183,6 +196,10 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
   const startRoot = findProjectRoot(opts.cwd ?? process.cwd());
   const page = fs.readFileSync(HTML_PATH);
   const icon = fs.readFileSync(ICON_PATH);
+  // Open the SQLite index once and reuse it. Opening it per request added ~200ms
+  // of connection/FTS setup to every /api/state call, which made the whole UI
+  // (initial load and every workspace switch) feel slow.
+  const index = new Index();
 
   const server = http.createServer((req, res) => {
     try {
@@ -215,7 +232,7 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
           pid: process.pid,
         }, isHead);
       } else if (url.pathname === '/api/state') {
-        handleState(url, startRoot, res, isHead);
+        handleState(index, url, startRoot, res, isHead);
       } else {
         json(res, 404, { error: 'not found' }, isHead);
       }
@@ -254,7 +271,7 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
         resolve({
           url: `http://127.0.0.1:${boundPort}`,
           port: boundPort,
-          close: () => server.close(),
+          close: () => { server.close(); index.close(); },
         });
       });
     };
