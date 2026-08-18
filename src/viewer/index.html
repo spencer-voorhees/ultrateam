@@ -2868,17 +2868,24 @@ function renderThreadGroup(g, d) {
     )
   );
 
-  // Render the thread as an exchange: each entry is a message with the author's
-  // avatar in a connected rail, so a hand-off between agents reads as a reply.
-  const body = [];
+  // Render the thread as an exchange with an avatar rail. Baton passes are
+  // computed in chronological order (so "picked up the thread" is accurate),
+  // but the messages are displayed newest-first — matching the rest of the app
+  // — so the latest entry is at the top and you never scroll to find it.
   let prevKey = null;
-  g.entries.forEach((e, idx) => {
-    const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
+  const rows = g.entries.map((e) => {
     const k = agentKey(e.agent && e.agent.name);
-    const name = getAgentDisplayName(e.agent && e.agent.name, e.meta && e.meta.display, meta);
     const passed = prevKey && k && k !== prevKey;
+    prevKey = k || prevKey;
+    return { e, passed };
+  });
+  rows.reverse();
+  const body = rows.map(({ e, passed }, idx) => {
+    const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
+    const name = getAgentDisplayName(e.agent && e.agent.name, e.meta && e.meta.display, meta);
     const expanded = state.threadExpanded && state.threadExpanded.has(e.id);
-    body.push(h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${idx === g.entries.length - 1 ? ' thread-msg-last' : ''}` },
+    const isLast = idx === rows.length - 1; // bottom row (oldest) ends the rail
+    return h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${isLast ? ' thread-msg-last' : ''}` },
       h('div', { class: 'thread-msg-rail' },
         h('span', { class: 'thread-msg-avatar agent-icon-badge', style: `--p-color:${meta.color};`, title: name }, svgIcon(meta.icon, 13, 13)),
         h('span', { class: 'thread-msg-line' })
@@ -2892,8 +2899,7 @@ function renderThreadGroup(g, d) {
         ),
         expanded ? renderCard(e, d) : renderThreadEntryCondensed(e, d)
       )
-    ));
-    prevKey = k || prevKey;
+    );
   });
   return h('div', { class: `thread-group ${collapsed ? 'collapsed' : ''}${isFresh ? ' thread-has-new' : ''}` },
     head,
