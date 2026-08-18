@@ -103,10 +103,9 @@ export const AGENT_TARGETS: AgentTarget[] = [
     ...mcpServersStyle(),
     globalConfigPath: () => path.join(os.homedir(), '.cursor', 'mcp.json'),
     globalStyle: 'mcpServers',
-    // Cursor does not load global rule files yet (~/.cursor/rules is a
-    // project-level convention; User Rules live in Cursor Settings → Rules).
-    // We still write the .mdc so it lights up if Cursor ships the much-requested
-    // feature; until then Cursor gets the nudge via the MCP server instructions.
+    // Cursor's docs only list project-level .cursor/rules and settings-based
+    // User Rules, but recent builds have been observed loading ~/.cursor/rules
+    // globally too. Keep the .mdc; the MCP server instructions back it up.
     globalInstructionsPath: () => path.join(os.homedir(), '.cursor', 'rules', 'ultrateam.mdc'),
     globalInstructionsDedicated: true,
     globalInstructionsFormat: 'mdc',
@@ -352,7 +351,7 @@ function ensureGlobalNudge(opts: InitOptions): string[] {
     }
     if (target.key === 'cursor') {
       report.push(
-        '  note: Cursor ignores global rule files today — it gets the nudge from the MCP server instructions instead. For a belt-and-suspenders setup, add a User Rule in Cursor Settings → Rules.',
+        '  note: global rule files are undocumented in Cursor — if this rule is not picked up, the MCP server instructions carry the nudge, or add a User Rule in Cursor Settings → Rules.',
       );
     }
   }
