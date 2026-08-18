@@ -23,6 +23,16 @@ import { createResumeState, resumableState } from './resume.js';
 const NUDGE =
   '\n\n---\nultrateam protocol: use resume to restore execution state; checkpoint meaningful progress; hand off structured next steps before the session ends.';
 
+// Delivered to every client in the initialize handshake. This is the one
+// channel that reaches agents whose global instruction files we cannot write
+// (Cursor has no file-based User Rules), so it carries the full usage nudge.
+const SERVER_INSTRUCTIONS =
+  'ultrateam is shared cross-agent memory for this project. At the start of a task, call recall ' +
+  '(or resume) to load prior context from any agent. Call checkpoint after each meaningful step and ' +
+  'handoff before the session ends so other agents can continue. When calling checkpoint or handoff, ' +
+  'always pass the model argument with the exact model id you are running as (e.g. "claude-sonnet-4-6", ' +
+  '"gpt-5.6") so entries are attributed to the right model.';
+
 const entryFields = {
   title: z.string().min(1).max(200).describe('Short, specific title for this entry'),
   summary: z
@@ -65,7 +75,16 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   }
   indexCurrentWorkspace();
 
-  const server = new McpServer({ name: 'ultrateam', version: VERSION });
+  const server = new McpServer(
+    { name: 'ultrateam', version: VERSION },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
+
+  // Agents routinely skip optional params; a reminder in the tool result is the
+  // one feedback channel every agent reads, so unattributed entries self-correct.
+  function modelReminder(model?: string): string {
+    return model ? '' : ' Entry has no model attribution — pass model: "<your model id>" next time.';
+  }
 
   function callerAgent(explicitName?: string, model?: string): AgentInfo {
     const clientName = server.server.getClientVersion()?.name;
@@ -231,7 +250,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
         content: [
           {
             type: 'text' as const,
-            text: `Checkpointed "${args.title}" (${id}) to shared memory for ${project}.`,
+            text: `Checkpointed "${args.title}" (${id}) to shared memory for ${project}.${modelReminder(args.model)}`,
           },
         ],
       };
@@ -258,7 +277,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
         content: [
           {
             type: 'text' as const,
-            text: `Handoff "${args.title}" (${id}) recorded. The next agent's recall will surface its open threads.`,
+            text: `Handoff "${args.title}" (${id}) recorded. The next agent's recall will surface its open threads.${modelReminder(args.model)}`,
           },
         ],
       };

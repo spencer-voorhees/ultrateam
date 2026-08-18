@@ -46,8 +46,14 @@ interface AgentTarget {
   globalInstructionsPath?: () => string | null;
   /** The instructions file is ours alone (write/delete whole), not shared with the user's content. */
   globalInstructionsDedicated?: boolean;
-  /** Write the dedicated file as a Cursor .mdc rule (YAML frontmatter with alwaysApply: true). */
-  globalInstructionsMdc?: boolean;
+  /**
+   * Shape of the dedicated file: 'mdc' is a Cursor rule (frontmatter with
+   * alwaysApply: true), 'instructions-md' is a Copilot *.instructions.md file
+   * (frontmatter with applyTo: '**'). Absent means plain markdown.
+   */
+  globalInstructionsFormat?: 'mdc' | 'instructions-md';
+  /** Obsolete instruction files from older versions, cleaned up on init and uninstall. */
+  legacyInstructionsPaths?: () => string[];
 }
 
 /** VS Code stores user MCP config under its per-OS User directory. */
@@ -97,11 +103,13 @@ export const AGENT_TARGETS: AgentTarget[] = [
     ...mcpServersStyle(),
     globalConfigPath: () => path.join(os.homedir(), '.cursor', 'mcp.json'),
     globalStyle: 'mcpServers',
-    // Cursor reads global rules from ~/.cursor/rules/*.mdc, but only attaches
-    // them in Agent mode when the frontmatter sets alwaysApply: true.
+    // Cursor does not load global rule files yet (~/.cursor/rules is a
+    // project-level convention; User Rules live in Cursor Settings → Rules).
+    // We still write the .mdc so it lights up if Cursor ships the much-requested
+    // feature; until then Cursor gets the nudge via the MCP server instructions.
     globalInstructionsPath: () => path.join(os.homedir(), '.cursor', 'rules', 'ultrateam.mdc'),
     globalInstructionsDedicated: true,
-    globalInstructionsMdc: true,
+    globalInstructionsFormat: 'mdc',
   },
   {
     key: 'copilot',
@@ -121,10 +129,16 @@ export const AGENT_TARGETS: AgentTarget[] = [
       'ultrateam' in (config.servers as Record<string, unknown>),
     globalConfigPath: vscodeUserMcpPath,
     globalStyle: 'servers',
-    // VS Code / Copilot reads user-level instructions from ~/.copilot/instructions
-    // recursively, so we drop a dedicated file there.
-    globalInstructionsPath: () => path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.md'),
+    // VS Code and Copilot CLI both discover user-level instructions matching
+    // ~/.copilot/instructions/**/*.instructions.md — the .instructions.md suffix
+    // and an applyTo glob are required, a plain .md there is ignored.
+    globalInstructionsPath: () =>
+      path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.instructions.md'),
     globalInstructionsDedicated: true,
+    globalInstructionsFormat: 'instructions-md',
+    legacyInstructionsPaths: () => [
+      path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.md'),
+    ],
   },
   {
     // The Copilot CLI (and the standalone app) read MCP from their own file with
@@ -136,8 +150,13 @@ export const AGENT_TARGETS: AgentTarget[] = [
     ...mcpServersStyle(),
     globalConfigPath: () => path.join(os.homedir(), '.copilot', 'mcp-config.json'),
     globalStyle: 'copilot-cli',
-    globalInstructionsPath: () => path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.md'),
+    globalInstructionsPath: () =>
+      path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.instructions.md'),
     globalInstructionsDedicated: true,
+    globalInstructionsFormat: 'instructions-md',
+    legacyInstructionsPaths: () => [
+      path.join(os.homedir(), '.copilot', 'instructions', 'ultrateam.md'),
+    ],
   },
   {
     key: 'gemini',
@@ -280,6 +299,27 @@ const NUDGE_BODY =
 const GLOBAL_NUDGE = `${NUDGE_MARKER}\n${NUDGE_BODY}${NUDGE_END}\n`;
 // Cursor .mdc form: frontmatter with alwaysApply so Agent mode reliably attaches it.
 const MDC_NUDGE = `---\ndescription: ultrateam shared memory\nalwaysApply: true\n---\n${NUDGE_BODY}`;
+// Copilot *.instructions.md form: applyTo '**' so it attaches to every task.
+const INSTRUCTIONS_MD_NUDGE = `---\ndescription: ultrateam shared memory\napplyTo: '**'\n---\n${NUDGE_BODY}`;
+
+function dedicatedNudgeContent(format?: 'mdc' | 'instructions-md'): string {
+  if (format === 'mdc') return MDC_NUDGE;
+  if (format === 'instructions-md') return INSTRUCTIONS_MD_NUDGE;
+  return NUDGE_BODY;
+}
+
+/** Remove instruction files that older versions wrote under now-wrong names. */
+function removeLegacyInstructions(target: AgentTarget): void {
+  for (const file of target.legacyInstructionsPaths?.() ?? []) {
+    try {
+      if (fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes(NUDGE_SIGNATURE)) {
+        fs.rmSync(file, { force: true });
+      }
+    } catch {
+      // never let cleanup break init
+    }
+  }
+}
 
 /**
  * Add the short usage nudge to each agent's global instructions, silently.
@@ -288,22 +328,35 @@ const MDC_NUDGE = `---\ndescription: ultrateam shared memory\nalwaysApply: true\
  * are written whole; shared files (CLAUDE.md/AGENTS.md/GEMINI.md) get the
  * marker-wrapped block appended.
  */
-function ensureGlobalNudge(opts: InitOptions): void {
+function ensureGlobalNudge(opts: InitOptions): string[] {
+  const report: string[] = [];
   for (const target of AGENT_TARGETS) {
     if (!target.detect() && !opts.all) continue;
+    removeLegacyInstructions(target);
     const file = target.globalInstructionsPath?.();
     if (!file) continue;
     if (target.globalInstructionsDedicated) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, target.globalInstructionsMdc ? MDC_NUDGE : NUDGE_BODY, 'utf8');
+      fs.writeFileSync(file, dedicatedNudgeContent(target.globalInstructionsFormat), 'utf8');
+      report.push(`✓ ${target.label}: usage instructions at ${tildify(file)}`);
     } else {
       const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-      if (existing.includes(NUDGE_MARKER)) continue;
+      if (existing.includes(NUDGE_MARKER)) {
+        report.push(`✓ ${target.label}: usage instructions already in ${tildify(file)}`);
+        continue;
+      }
       const next = existing === '' ? GLOBAL_NUDGE : existing.replace(/\n?$/, '\n\n') + GLOBAL_NUDGE;
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, next, 'utf8');
+      report.push(`✓ ${target.label}: usage instructions added to ${tildify(file)}`);
+    }
+    if (target.key === 'cursor') {
+      report.push(
+        '  note: Cursor ignores global rule files today — it gets the nudge from the MCP server instructions instead. For a belt-and-suspenders setup, add a User Rule in Cursor Settings → Rules.',
+      );
     }
   }
+  return report;
 }
 
 /**
@@ -347,7 +400,7 @@ export function initGlobal(cliEntry: string, opts: InitOptions = {}): string[] {
 
   report.push('');
   report.push(...ensureGlobalGitignore());
-  ensureGlobalNudge(opts); // writes each agent's global-instructions nudge, silently
+  report.push(...ensureGlobalNudge(opts));
   report.push('');
   report.push(`Server launch: ${cmd.command} ${cmd.args.join(' ')}`);
   report.push('Done.');
@@ -401,6 +454,7 @@ export function removeGlobalRegistrations(): string[] {
 
   // Usage nudges.
   for (const target of AGENT_TARGETS) {
+    removeLegacyInstructions(target);
     const file = target.globalInstructionsPath?.();
     if (!file || !fs.existsSync(file)) continue;
     const existing = fs.readFileSync(file, 'utf8');
@@ -479,6 +533,24 @@ export function doctor(root: string | null): string[] {
     if (registered) report.push(`✓ ${target.label}: registered globally`);
     else if (detected) report.push(`✗ ${target.label}: not registered — run \`ultrateam init\``);
     else report.push(`- ${target.label}: not detected`);
+  }
+
+  // Usage-nudge instruction files — how each agent learns to call ultrateam.
+  for (const target of AGENT_TARGETS) {
+    if (!target.detect()) continue;
+    const file = target.globalInstructionsPath?.();
+    if (!file) continue;
+    const present = fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes(NUDGE_SIGNATURE);
+    report.push(
+      present
+        ? `✓ ${target.label}: usage instructions at ${tildify(file)}`
+        : `✗ ${target.label}: usage instructions missing (${tildify(file)}) — run \`ultrateam init\``,
+    );
+    for (const legacy of target.legacyInstructionsPaths?.() ?? []) {
+      if (fs.existsSync(legacy)) {
+        report.push(`✗ ${target.label}: stale ${tildify(legacy)} from an older version — run \`ultrateam init\` to clean it up`);
+      }
+    }
   }
 
   // Current project store (informational — created on first use).

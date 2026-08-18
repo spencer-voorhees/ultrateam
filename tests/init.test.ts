@@ -67,8 +67,14 @@ test('initGlobal registers the MCP server at the user level with absolute paths 
 
     // Usage nudge lands in each agent's global instructions where one exists.
     assert.ok(fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8').includes('ultrateam shared memory'));
-    // Copilot gets a dedicated file under ~/.copilot/instructions.
-    assert.ok(fs.readFileSync(path.join(home, '.copilot', 'instructions', 'ultrateam.md'), 'utf8').includes('ultrateam shared memory'));
+    // Copilot gets a dedicated *.instructions.md (the only pattern VS Code and
+    // the Copilot CLI discover) with applyTo so it attaches to every task.
+    const copilotNudge = fs.readFileSync(
+      path.join(home, '.copilot', 'instructions', 'ultrateam.instructions.md'),
+      'utf8',
+    );
+    assert.ok(copilotNudge.includes('ultrateam shared memory'));
+    assert.ok(copilotNudge.includes("applyTo: '**'"));
     // Cursor gets a dedicated .mdc rule with alwaysApply so Agent mode attaches it.
     const cursorRule = fs.readFileSync(path.join(home, '.cursor', 'rules', 'ultrateam.mdc'), 'utf8');
     assert.ok(cursorRule.includes('alwaysApply: true'));
@@ -102,12 +108,25 @@ test('initGlobal is idempotent and reversible', () => {
     const claude = JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8'));
     assert.ok(!('ultrateam' in (claude.mcpServers ?? {})));
     assert.ok(!fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8').includes('ultrateam shared memory'));
-    assert.ok(!fs.existsSync(path.join(home, '.copilot', 'instructions', 'ultrateam.md')));
+    assert.ok(!fs.existsSync(path.join(home, '.copilot', 'instructions', 'ultrateam.instructions.md')));
     assert.ok(!fs.existsSync(path.join(home, '.cursor', 'rules', 'ultrateam.mdc')));
     const codex = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
     assert.ok(!/\[mcp_servers\.ultrateam\]/.test(codex));
     const gi = fs.readFileSync(path.join(home, '.config', 'git', 'ignore'), 'utf8');
     assert.ok(!gi.split(/\r?\n/).some((l) => l.trim() === '.ultrateam/'));
+  });
+});
+
+test('initGlobal migrates the legacy copilot ultrateam.md to ultrateam.instructions.md', () => {
+  withTempHome((home) => {
+    const legacy = path.join(home, '.copilot', 'instructions', 'ultrateam.md');
+    fs.mkdirSync(path.dirname(legacy), { recursive: true });
+    fs.writeFileSync(legacy, '## ultrateam shared memory\nold nudge\n');
+
+    initGlobal('/opt/ultrateam/dist/cli.js', { all: true });
+
+    assert.ok(!fs.existsSync(legacy)); // stale file cleaned up, not left to shadow the new one
+    assert.ok(fs.existsSync(path.join(home, '.copilot', 'instructions', 'ultrateam.instructions.md')));
   });
 });
 
