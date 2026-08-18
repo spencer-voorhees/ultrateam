@@ -1130,6 +1130,24 @@ html.sidebar-resizing .nav-bar {
   padding: 1px 7px;
 }
 
+/* "Show N earlier" expander, aligned with the message content past the rail */
+.thread-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 33px;
+  padding: 0.35rem 0 0.5rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.thread-more:hover { color: var(--text-primary); }
+.thread-more-caret { display: inline-flex; color: var(--text-tertiary); transform: rotate(-90deg); transition: transform 0.16s ease; }
+.thread-more-caret.is-open { transform: rotate(0deg); }
+
 /* Expand / collapse-all toolbar */
 .thread-toolbar {
   display: flex;
@@ -2158,6 +2176,7 @@ const state = {
   newEntryIds: new Set(),
   collapsedThreads: new Set(),
   threadExpanded: new Set(),
+  threadShowAll: new Set(),
   freshThreads: new Set(),
   lastThreadKeys: [],
   feedView: (() => { try { return localStorage.getItem('ut-feed-view') === 'threads' ? 'threads' : 'timeline'; } catch { return 'timeline'; } })(),
@@ -2880,11 +2899,18 @@ function renderThreadGroup(g, d) {
     return { e, passed };
   });
   rows.reverse();
-  const body = rows.map(({ e, passed }, idx) => {
+  // Keep threads glanceable: show only the latest few entries by default, with a
+  // "show earlier" expander for the rest of the chain (Twitter-style).
+  const THREAD_PREVIEW = 3;
+  const showAll = rows.length <= THREAD_PREVIEW || (state.threadShowAll && state.threadShowAll.has(g.key));
+  const visible = showAll ? rows : rows.slice(0, THREAD_PREVIEW);
+  const body = visible.map(({ e, passed }, idx) => {
     const meta = getProviderMeta(e.agent && e.agent.name, e.agent && e.agent.provider);
     const name = getAgentDisplayName(e.agent && e.agent.name, e.meta && e.meta.display, meta);
     const expanded = state.threadExpanded && state.threadExpanded.has(e.id);
-    const isLast = idx === rows.length - 1; // bottom row (oldest) ends the rail
+    // Only the true oldest (shown when fully expanded) ends the rail; while
+    // collapsed, the last visible row keeps its line down to the expander.
+    const isLast = showAll && idx === visible.length - 1;
     return h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${isLast ? ' thread-msg-last' : ''}` },
       h('div', { class: 'thread-msg-rail' },
         h('span', { class: 'thread-msg-avatar agent-icon-badge', style: `--p-color:${meta.color};`, title: name }, svgIcon(meta.icon, 13, 13)),
@@ -2901,6 +2927,13 @@ function renderThreadGroup(g, d) {
       )
     );
   });
+  if (rows.length > THREAD_PREVIEW) {
+    const hidden = rows.length - THREAD_PREVIEW;
+    body.push(h('button', { class: 'thread-more', type: 'button', onclick: () => toggleThreadShowAll(g.key) },
+      h('span', { class: `thread-more-caret ${showAll ? 'is-open' : ''}` }, svgIcon('#icon-chevron', 12, 12)),
+      h('span', {}, showAll ? 'Show fewer' : `Show ${hidden} earlier ${hidden === 1 ? 'entry' : 'entries'}`)
+    ));
+  }
   return h('div', { class: `thread-group ${collapsed ? 'collapsed' : ''}${isFresh ? ' thread-has-new' : ''}` },
     head,
     h('div', { class: 'thread-body' }, ...body)
@@ -2931,6 +2964,13 @@ function toggleThreadEntry(id) {
   if (!state.threadExpanded) state.threadExpanded = new Set();
   if (state.threadExpanded.has(id)) state.threadExpanded.delete(id);
   else state.threadExpanded.add(id);
+  render();
+}
+
+function toggleThreadShowAll(key) {
+  if (!state.threadShowAll) state.threadShowAll = new Set();
+  if (state.threadShowAll.has(key)) state.threadShowAll.delete(key);
+  else state.threadShowAll.add(key);
   render();
 }
 
