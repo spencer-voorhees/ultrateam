@@ -2728,8 +2728,15 @@ async function fetchState({ transition = false } = {}) {
     if (currentSeq !== state.seq) return;
     if (raw === state.rawPayload) return;
     const nextData = JSON.parse(raw);
+    // "New" badges only make sense when this response is a like-for-like
+    // refresh of what's on screen. Comparing across a scope change or a
+    // search being applied/cleared would mark every re-appearing entry as
+    // new (the classic case: clear a search, the full list "arrives").
+    const comparable = state.data && !transition
+      && (state.data.scope ?? null) === (nextData.scope ?? null)
+      && (state.data.query ?? null) === (nextData.query ?? null);
     const previousIds = new Set((state.data?.entries || []).map((entry) => entry.id));
-    const arrivals = state.data && !transition
+    const arrivals = comparable
       ? (nextData.entries || []).filter((entry) => !previousIds.has(entry.id))
       : [];
     state.newEntryIds = new Set(arrivals.map((entry) => entry.id));
@@ -2738,10 +2745,15 @@ async function fetchState({ transition = false } = {}) {
     state.data = nextData;
     if (!state.scope) state.scope = state.data.scope;
 
-    try {
-      const cacheKey = `ut-state-cache:${state.scope || 'all'}`;
-      sessionStorage.setItem(cacheKey, raw);
-    } catch (e) {}
+    // Cache only unfiltered snapshots: a search response stored under the
+    // scope's key would clobber the warm snapshot that makes clearing the
+    // search (and workspace switching) paint instantly.
+    if (!nextData.query) {
+      try {
+        const cacheKey = `ut-state-cache:${state.scope || 'all'}`;
+        sessionStorage.setItem(cacheKey, raw);
+      } catch (e) {}
+    }
 
     syncUrl();
     render({ animateStats: !isInitialFetch });
