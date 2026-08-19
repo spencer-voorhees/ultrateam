@@ -789,6 +789,10 @@ html.sidebar-resizing .nav-bar {
 .nav-item-left svg {
   flex: 0 0 auto;
 }
+.nav-item-icon-wrap {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
 .nav-item-label {
   min-width: 0;
   white-space: nowrap;
@@ -2833,21 +2837,20 @@ function renderProjectNav(d) {
 
   setChildren(list, items.map((p) => {
     const isActive = (state.scope === p.id) || (p.id === 'all' && state.scope === 'all');
+    // Every workspace's path is a hover away, but only over the icon + name —
+    // a title on the whole row would pop tooltips while merely scanning the list.
+    const pathTitle = p.path || undefined;
     return h('button', {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
-      // Tooltip only where there's ambiguity to resolve — hovering every row
-      // while scanning the list shouldn't pop paths. The top-bar title always
-      // carries the selected workspace's path.
-      title: p.hint ? p.path : undefined,
       onclick: () => {
         state.scope = p.id;
         fetchState({ transition: true });
       },
     },
       h('div', { class: 'nav-item-left' },
-        svgIcon('#icon-folder', 13, 13),
-        h('span', { class: 'nav-item-label' }, p.name),
-        p.hint ? h('span', { class: 'nav-item-hint' }, p.hint) : null
+        h('span', { class: 'nav-item-icon-wrap', title: pathTitle }, svgIcon('#icon-folder', 13, 13)),
+        h('span', { class: 'nav-item-label', title: pathTitle }, p.name),
+        p.hint ? h('span', { class: 'nav-item-hint', title: pathTitle }, p.hint) : null
       ),
       h('span', { class: 'nav-count-pill' }, String(p.count || 0))
     );
