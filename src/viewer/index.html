@@ -2834,7 +2834,7 @@ function renderProjectNav(d) {
     const isActive = (state.scope === p.id) || (p.id === 'all' && state.scope === 'all');
     return h('button', {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
-      title: p.hint ? p.path : undefined,
+      title: p.path || undefined,
       onclick: () => {
         state.scope = p.id;
         fetchState({ transition: true });
