@@ -793,6 +793,10 @@ html.sidebar-resizing .nav-bar {
   display: inline-flex;
   flex: 0 0 auto;
 }
+.ws-folder-tint {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
 .nav-item-label {
   min-width: 0;
   white-space: nowrap;
@@ -809,6 +813,101 @@ html.sidebar-resizing .nav-bar {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Workspace folder colors — one hue set that reads on both themes. */
+:root {
+  --ws-red: #e5484d;
+  --ws-orange: #f76b15;
+  --ws-yellow: #ca8a04;
+  --ws-green: #30a46c;
+  --ws-blue: #0090ff;
+  --ws-purple: #8e4ec6;
+  --ws-pink: #d6409f;
+}
+.nav-item-row { position: relative; }
+/* The ⋯ options button sits over the count pill and swaps in on row hover. */
+.nav-item-menu {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.nav-item-menu:hover { background: var(--surface-hover); color: var(--text-primary); }
+.nav-item-row:hover .nav-item-menu,
+.nav-item-row:focus-within .nav-item-menu { display: inline-flex; }
+.nav-item-row:hover .nav-count-pill,
+.nav-item-row:focus-within .nav-count-pill { visibility: hidden; }
+
+/* Per-workspace options popover (display name + folder color). */
+.ws-popover {
+  position: fixed;
+  z-index: 300;
+  width: 220px;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.ws-popover-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.ws-popover-input:focus { outline: none; border-color: var(--text-tertiary); }
+.ws-popover-label {
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+.ws-swatches { display: flex; gap: 0.35rem; }
+.ws-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--swatch, var(--text-tertiary));
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.ws-swatch.none {
+  background: none;
+  border: 1.5px solid var(--text-tertiary);
+  position: relative;
+}
+/* Diagonal slash marks the "no color" swatch. */
+.ws-swatch.none::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-top: 1.5px solid var(--text-tertiary);
+  transform: rotate(-45deg) translateY(4px);
+}
+.ws-swatch.selected { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--swatch, var(--text-tertiary)); }
 .nav-count-pill {
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
@@ -2684,6 +2783,7 @@ function render({ animateStats = false } = {}) {
 
   annotateProjectNames(d.projects);
   state.workspaceLabelByPath = buildWorkspaceNameIndex(d);
+  state.workspaceColorByPath = buildWorkspaceColorIndex(d);
   renderOverview(d, { animateStats });
   renderRoster(d);
   renderProjectNav(d);
@@ -2840,7 +2940,7 @@ function renderProjectNav(d) {
     // Every workspace's path is a hover away, but only over the icon + name —
     // a title on the whole row would pop tooltips while merely scanning the list.
     const pathTitle = p.path || undefined;
-    return h('button', {
+    const btn = h('button', {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
       onclick: () => {
         state.scope = p.id;
@@ -2848,12 +2948,24 @@ function renderProjectNav(d) {
       },
     },
       h('div', { class: 'nav-item-left' },
-        h('span', { class: 'nav-item-icon-wrap', title: pathTitle }, svgIcon('#icon-folder', 13, 13)),
+        h('span', {
+          class: 'nav-item-icon-wrap',
+          title: pathTitle,
+          style: p.color ? `color: var(--ws-${p.color});` : undefined,
+        }, svgIcon('#icon-folder', 13, 13)),
         h('span', { class: 'nav-item-label', title: pathTitle }, p.name),
         p.hint ? h('span', { class: 'nav-item-hint', title: pathTitle }, p.hint) : null
       ),
       h('span', { class: 'nav-count-pill' }, String(p.count || 0))
     );
+    if (p.id === 'all') return h('div', { class: 'nav-item-row' }, btn);
+    const menu = h('button', {
+      class: 'nav-item-menu',
+      title: 'Workspace options',
+      'aria-label': `Options for ${p.name}`,
+      onclick: (e) => { e.stopPropagation(); openWorkspacePopover(p, e.currentTarget); },
+    }, '⋯');
+    return h('div', { class: 'nav-item-row' }, btn, menu);
   }));
 }
 
@@ -2918,6 +3030,110 @@ function renderFeed(d, { animateStats = false } = {}) {
 
 // Group entries into work threads by branch (the natural line of work), newest
 // thread first, entries within a thread oldest-first so the relay reads top-down.
+// --- Workspace options popover (display name + folder color) -----------------
+
+const WS_COLORS = [null, 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'];
+let wsPopover = null;
+
+function closeWorkspacePopover() {
+  if (!wsPopover) return;
+  wsPopover.remove();
+  wsPopover = null;
+  document.removeEventListener('pointerdown', onWsPopoverOutside, true);
+  document.removeEventListener('keydown', onWsPopoverKey, true);
+}
+function onWsPopoverOutside(e) {
+  if (wsPopover && !wsPopover.contains(e.target)) closeWorkspacePopover();
+}
+function onWsPopoverKey(e) {
+  if (e.key === 'Escape') closeWorkspacePopover();
+}
+
+async function saveWorkspacePrefs(p, update) {
+  try {
+    const res = await fetch('/api/prefs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: p.id, ...update }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    const proj = ((state.data && state.data.projects) || []).find((x) => x.id === p.id) || p;
+    if (update.name !== undefined) {
+      proj.customName = update.name;
+      proj.name = update.name ?? proj.recordedName ?? proj.name;
+    }
+    if (update.color !== undefined) proj.color = update.color;
+    if (proj !== p) Object.assign(p, { customName: proj.customName, name: proj.name, color: proj.color });
+    render();
+  } catch (err) {
+    showToast('Could not save workspace options: ' + err.message);
+  }
+}
+
+function openWorkspacePopover(p, anchor) {
+  closeWorkspacePopover();
+  const recorded = p.recordedName
+    || (p.path ? p.path.split(/[\\/]/).filter(Boolean).pop() : '')
+    || 'Workspace';
+  const input = h('input', {
+    class: 'ws-popover-input',
+    type: 'text',
+    placeholder: recorded,
+    value: p.customName ?? '',
+    maxlength: '60',
+    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } },
+    // Commit on blur; an empty or unchanged-from-recorded value clears the override.
+    onblur: () => {
+      const v = input.value.trim();
+      const next = (v === '' || v === recorded) ? null : v;
+      if (next !== (p.customName ?? null)) void saveWorkspacePrefs(p, { name: next });
+    },
+  });
+  const swatches = h('div', { class: 'ws-swatches' }, WS_COLORS.map((c) =>
+    h('button', {
+      class: `ws-swatch${c ? '' : ' none'}${(p.color ?? null) === c ? ' selected' : ''}`,
+      style: c ? `--swatch: var(--ws-${c});` : undefined,
+      title: c ?? 'No color',
+      'data-color': c ?? '',
+      onclick: (e) => {
+        void saveWorkspacePrefs(p, { color: c });
+        for (const el of e.currentTarget.parentElement.children) {
+          el.classList.toggle('selected', el.dataset.color === (c ?? ''));
+        }
+      },
+    })
+  ));
+  wsPopover = h('div', { class: 'ws-popover', role: 'dialog', 'aria-label': `Options for ${recorded}` },
+    h('div', { class: 'ws-popover-label' }, 'Display name'),
+    input,
+    h('div', { class: 'ws-popover-label' }, 'Folder color'),
+    swatches
+  );
+  document.body.appendChild(wsPopover);
+  const r = anchor.getBoundingClientRect();
+  const width = 220;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+  wsPopover.style.left = `${left}px`;
+  const height = wsPopover.offsetHeight;
+  wsPopover.style.top = r.bottom + 6 + height > window.innerHeight
+    ? `${Math.max(8, r.top - height - 6)}px`
+    : `${r.bottom + 6}px`;
+  document.addEventListener('pointerdown', onWsPopoverOutside, true);
+  document.addEventListener('keydown', onWsPopoverKey, true);
+  input.focus();
+}
+
+// Map workspace roots to their folder color, for the feed chips and thread heads.
+function buildWorkspaceColorIndex(d) {
+  const byPath = new Map();
+  for (const p of (d.projects || [])) {
+    if (!p.color) continue;
+    const roots = (p.roots && p.roots.length) ? p.roots : [p.path];
+    for (const r of roots) if (r) byPath.set(r, p.color);
+  }
+  return byPath;
+}
+
 // Two workspaces can share a folder name (~/a/demo and ~/b/demo). When names
 // collide, give each colliding project a `hint`: the shortest trailing slice of
 // its parent path that tells them apart. Unique names get no hint.
@@ -2979,7 +3195,9 @@ function renderThreadedFeed(entries, d) {
     // Keep a genuine null branch (non-git workspace) null — don't fabricate "main".
     const branch = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : null;
     const key = threadKey(e.projectPath, branch);
-    if (!groups.has(key)) groups.set(key, { branch, projectPath: e.projectPath, workspace: e.project || names.get(e.projectPath) || '', entries: [] });
+    // Prefer the names map: it carries custom display names and collision hints;
+    // the entry's recorded project field is the fallback.
+    if (!groups.has(key)) groups.set(key, { branch, projectPath: e.projectPath, workspace: names.get(e.projectPath) || e.project || '', entries: [] });
     groups.get(key).entries.push(e);
   }
   const groupArr = [...groups.entries()].map(([key, g]) => {
@@ -3028,7 +3246,14 @@ function renderThreadGroup(g, d) {
   const head = h('button', { class: 'thread-head', type: 'button', onclick: () => toggleThread(g.key) },
     h('span', { class: 'thread-chevron' }, svgIcon('#icon-chevron', 14, 14)),
     h('span', { class: 'thread-head-labels' },
-      g.workspace ? h('span', { class: 'thread-workspace' }, svgIcon('#icon-folder', 11, 11), h('span', {}, g.workspace)) : null,
+      g.workspace ? h('span', { class: 'thread-workspace' },
+        h('span', {
+          class: 'ws-folder-tint',
+          style: state.workspaceColorByPath?.get(g.projectPath)
+            ? `color: var(--ws-${state.workspaceColorByPath.get(g.projectPath)});`
+            : undefined,
+        }, svgIcon('#icon-folder', 11, 11)),
+        h('span', {}, g.workspace)) : null,
       g.branch ? h('span', { class: 'thread-branch' }, svgIcon('#icon-branch', 12, 12), h('span', {}, g.branch)) : null
     ),
     h('span', { class: 'thread-relay' }, ...relayNodes),
@@ -3202,7 +3427,12 @@ function renderCard(entry, d) {
         h('span', {}, entry.branch)
       ) : null,
       d.scope === 'all' && entry.project ? h('span', { class: 'card-context-item' },
-        svgIcon('#icon-folder', 10, 10),
+        h('span', {
+          class: 'ws-folder-tint',
+          style: state.workspaceColorByPath?.get(entry.projectPath)
+            ? `color: var(--ws-${state.workspaceColorByPath.get(entry.projectPath)});`
+            : undefined,
+        }, svgIcon('#icon-folder', 10, 10)),
         h('span', {}, state.workspaceLabelByPath?.get(entry.projectPath) || entry.project)
       ) : null
     ) : null,

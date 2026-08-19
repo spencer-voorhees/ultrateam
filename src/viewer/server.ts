@@ -10,6 +10,7 @@ import { findProjectRoot, isUltrateamInstallDirectory } from '../store/jsonl.js'
 import { knownRoots, unregisterRoot } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
 import { workspaceIdentity } from '../workspace.js';
+import { readAllPrefs, updatePrefs, WORKSPACE_COLORS } from '../store/prefs.js';
 
 export interface ViewerOptions {
   port?: number;
@@ -139,13 +140,26 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
     for (const project of projects) {
       project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
     }
+    // Presentation prefs overlay (display name, folder color). Applied before
+    // the sort and the exact-name search below, so custom names behave like
+    // real names everywhere.
+    const prefs = readAllPrefs();
+    for (const project of projects as Array<
+      (typeof projects)[number] & { customName: string | null; color: string | null; recordedName: string }
+    >) {
+      const p = prefs[project.id];
+      project.recordedName = project.name; // what the entries actually say — the rename UI's placeholder
+      project.customName = p?.name ?? null;
+      project.color = p?.color ?? null;
+      if (p?.name) project.name = p.name;
+    }
     projects.sort((a, b) => b.lastTs.localeCompare(a.lastTs) || a.name.localeCompare(b.name));
     if (scope && !projects.some((p) => p.id === scope)) {
       // The scoped workspace has no memory yet. Only show an empty placeholder
       // when the user explicitly navigated to it; if we merely defaulted to the
       // launch directory, present everything instead of inventing a workspace.
       if (requestedScope && requestedScope !== 'all') {
-        projects.unshift({ id: scope, path: '', name: 'Workspace', count: 0, lastTs: '', roots: [] });
+        projects.unshift({ id: scope, path: '', name: prefs[scope]?.name ?? 'Workspace', count: 0, lastTs: '', roots: [] });
       } else {
         scope = null;
       }
@@ -203,6 +217,48 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
   }
 }
 
+/**
+ * POST /api/prefs — set a workspace's display name / folder color overrides.
+ * JSON content-type is required: cross-origin JSON POSTs always trigger a CORS
+ * preflight, which this server never approves, so browsers cannot forge one.
+ */
+function handlePrefsUpdate(req: http.IncomingMessage, res: http.ServerResponse): void {
+  if (!/^application\/json\b/i.test(String(req.headers['content-type'] ?? ''))) {
+    json(res, 415, { error: 'content-type must be application/json' });
+    return;
+  }
+  let body = '';
+  let overflow = false;
+  req.on('data', (chunk) => {
+    body += chunk;
+    if (body.length > 16_384) {
+      overflow = true;
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    if (overflow) return;
+    try {
+      const parsed = JSON.parse(body) as { id?: unknown; name?: unknown; color?: unknown };
+      if (typeof parsed.id !== 'string') {
+        json(res, 400, { error: 'id is required' });
+        return;
+      }
+      const update: { name?: string | null; color?: string | null } = {};
+      if ('name' in parsed) update.name = parsed.name === null ? null : String(parsed.name);
+      if ('color' in parsed) update.color = parsed.color === null ? null : String(parsed.color);
+      const all = updatePrefs(parsed.id, update);
+      if (!all) {
+        json(res, 400, { error: `invalid update; colors are ${WORKSPACE_COLORS.join(', ')}` });
+        return;
+      }
+      json(res, 200, { ok: true, prefs: all });
+    } catch (err) {
+      json(res, 400, { error: String(err) });
+    }
+  });
+}
+
 /** Defense against DNS rebinding: only loopback host names may talk to the API. */
 function hostAllowed(req: http.IncomingMessage): boolean {
   const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
@@ -225,6 +281,8 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
       const isHead = req.method === 'HEAD';
       if (!hostAllowed(req)) {
         json(res, 403, { error: 'forbidden host' }, isHead);
+      } else if (req.method === 'POST' && url.pathname === '/api/prefs') {
+        handlePrefsUpdate(req, res);
       } else if (req.method !== 'GET' && req.method !== 'HEAD') {
         json(res, 405, { error: 'method not allowed' }, isHead);
       } else if (url.pathname === '/') {
