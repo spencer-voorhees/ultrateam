@@ -435,7 +435,7 @@ test('latestResume prefers a capsule on the current branch and supports exact id
 
 test('contributions aggregates per agent across all entries, uncapped', () => {
   const index = tempIndex();
-  index.upsert(makeEntry({ project: 'alpha', agent: { name: 'cursor', provider: 'anthropic' }, kind: 'note', files: ['a.ts', 'b.ts'], decisions: ['d1'] }), '/alpha');
+  index.upsert(makeEntry({ project: 'alpha', agent: { name: 'cursor', provider: 'anthropic', model: 'claude-sonnet-4-6' }, kind: 'note', files: ['a.ts', 'b.ts'], decisions: ['d1'] }), '/alpha');
   index.upsert(makeEntry({ project: 'alpha', agent: { name: 'cursor', provider: 'anthropic' }, kind: 'handoff', files: ['b.ts'], open_threads: ['t1', 't2'] }), '/alpha');
   index.upsert(makeEntry({ project: 'beta', agent: { name: 'codex', provider: 'openai' }, kind: 'session', files: ['x.ts'] }), '/beta');
 
@@ -450,6 +450,12 @@ test('contributions aggregates per agent across all entries, uncapped', () => {
   assert.equal(byName['cursor'].decisions, 1);
   assert.equal(byName['cursor'].openThreads, 2);
   assert.equal(byName['cursor'].workspaces, 1);
+  // Per-model breakdown: named models first, unattributed entries in a null bucket last.
+  assert.deepEqual(byName['cursor'].models, [
+    { model: 'claude-sonnet-4-6', count: 1 },
+    { model: null, count: 1 },
+  ]);
+  assert.deepEqual(byName['codex'].models, [{ model: null, count: 1 }]);
 
   assert.equal(byName['codex'].count, 1);
   assert.equal(byName['codex'].checkpoints, 1);

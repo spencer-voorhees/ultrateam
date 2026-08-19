@@ -466,6 +466,76 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   gap: 0.55rem;
   margin-bottom: 0.7rem;
 }
+/* The head doubles as the accordion toggle for the per-model breakdown. */
+.usage-card-toggle {
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.usage-card-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transform: rotate(-90deg);
+  transition: transform 0.16s ease;
+}
+.usage-card-chevron.is-open { transform: rotate(0deg); }
+.usage-card-models {
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.usage-model-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.usage-model-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-model-none { font-family: inherit; font-style: italic; color: var(--text-tertiary); }
+.usage-model-bar {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--p-color, var(--text-tertiary)) 14%, transparent);
+  overflow: hidden;
+}
+.usage-model-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-color, var(--text-tertiary));
+}
+.usage-model-count {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Unattributed entries read as absence, not as another model. */
+.usage-model-row:has(.usage-model-none) .usage-model-bar-fill {
+  background: var(--text-tertiary);
+  opacity: 0.45;
+}
 .usage-card-avatar {
   width: 28px;
   height: 28px;
@@ -2290,7 +2360,7 @@ function fullDateTime(iso) {
 // Reuses the drawer shell (usage-* ids/classes) but shows each agent's
 // contribution computed from the shared memory itself — reliable for every
 // provider, with no external logs or APIs.
-const statsState = { open: false };
+const statsState = { open: false, expanded: null, lastReport: null };
 
 function fmtNum(n) {
   n = n || 0;
@@ -2349,6 +2419,7 @@ async function loadStats() {
 }
 
 function renderStats(report) {
+  statsState.lastReport = report; // kept so expand/collapse can re-render without refetching
   const body = $('#usage-drawer-body');
   const list = (report && report.agents) || [];
   if (!list.length) {
@@ -2369,10 +2440,21 @@ function renderStats(report) {
 function renderStatsCard(a, totalEntries) {
   const meta = getProviderMeta(a.name, a.provider);
   const share = totalEntries ? Math.round((a.count / totalEntries) * 100) : 0;
-  const head = h('div', { class: 'usage-card-head' },
+  const expanded = statsState.expanded === a.name;
+  const head = h('button', {
+      class: 'usage-card-head usage-card-toggle',
+      'aria-expanded': String(expanded),
+      title: expanded ? 'Hide model breakdown' : 'Show model breakdown',
+      onclick: () => {
+        // Accordion: opening a card closes whichever one was open.
+        statsState.expanded = expanded ? null : a.name;
+        if (statsState.lastReport) renderStats(statsState.lastReport);
+      },
+    },
     h('span', { class: 'usage-card-avatar', style: `--p-color:${meta.color};` }, svgIcon(meta.icon, 15, 15)),
     h('span', { class: 'usage-card-name' }, getAgentDisplayName(a.name, a.meta && a.meta.display, meta)),
-    h('span', { class: 'usage-card-status' }, a.lastTs ? timeAgo(a.lastTs) : '')
+    h('span', { class: 'usage-card-status' }, a.lastTs ? timeAgo(a.lastTs) : ''),
+    h('span', { class: `usage-card-chevron${expanded ? ' is-open' : ''}` }, svgIcon('#icon-chevron', 13, 13))
   );
   const figure = h('div', { class: 'usage-card-figure' },
     h('span', { class: 'usage-card-tokens' }, `${fmtNum(a.count)} entr${a.count === 1 ? 'y' : 'ies'}`),
@@ -2388,9 +2470,28 @@ function renderStatsCard(a, totalEntries) {
   chip(a.files, a.files === 1 ? 'file' : 'files');
   chip(a.decisions, a.decisions === 1 ? 'decision' : 'decisions');
   chip(a.openThreads, a.openThreads === 1 ? 'open thread' : 'open threads');
-  return h('div', { class: 'usage-card', style: `--p-color:${meta.color};` },
+  return h('div', { class: `usage-card${expanded ? ' expanded' : ''}`, style: `--p-color:${meta.color};` },
     head, figure, bar,
-    chips.length ? h('div', { class: 'stats-chips' }, ...chips) : null
+    chips.length ? h('div', { class: 'stats-chips' }, ...chips) : null,
+    expanded ? renderModelBreakdown(a) : null
+  );
+}
+
+function renderModelBreakdown(a) {
+  // Older servers omit models entirely — treat the whole count as unattributed.
+  const list = (a.models && a.models.length) ? a.models : [{ model: null, count: a.count }];
+  return h('div', { class: 'usage-card-models' },
+    list.map(({ model, count }) => {
+      const pct = a.count ? Math.round((count / a.count) * 100) : 0;
+      return h('div', { class: 'usage-model-row' },
+        model
+          ? h('span', { class: 'usage-model-name', title: model }, model)
+          : h('span', { class: 'usage-model-name usage-model-none' }, 'no model recorded'),
+        h('span', { class: 'usage-model-bar' },
+          h('span', { class: 'usage-model-bar-fill', style: `width:${Math.max(2, pct)}%;` })),
+        h('span', { class: 'usage-model-count' }, `${fmtNum(count)} · ${pct}%`)
+      );
+    })
   );
 }
 

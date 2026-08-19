@@ -71,6 +71,8 @@ export interface AgentContribution {
   files: number;
   workspaces: number;
   lastTs: string;
+  /** Entry counts per model id; model null groups entries recorded without one. */
+  models: Array<{ model: string | null; count: number }>;
 }
 
 interface EntryRow {
@@ -643,13 +645,14 @@ export class Index {
   contributions(projectPath?: string): { agents: AgentContribution[]; workspaces: number } {
     const workspaceId = resolveWorkspaceScope(projectPath);
     // GROUP BY id folds the same entry indexed under two checkouts into one.
-    const sql = `SELECT agent_name AS name, provider, kind, project, ts, files, decisions, open_threads
+    const sql = `SELECT agent_name AS name, agent_model AS model, provider, kind, project, ts, files, decisions, open_threads
                  FROM entries ${workspaceId ? 'WHERE workspace_id = ?' : ''}
                  GROUP BY id`;
     const rows = (
       workspaceId ? this.db.prepare(sql).all(workspaceId) : this.db.prepare(sql).all()
     ) as unknown as Array<{
       name: string;
+      model: string | null;
       provider: string | null;
       kind: string;
       project: string;
@@ -668,7 +671,11 @@ export class Index {
     };
     const byAgent = new Map<
       string,
-      Omit<AgentContribution, 'files' | 'workspaces'> & { files: Set<string>; workspaces: Set<string> }
+      Omit<AgentContribution, 'files' | 'workspaces' | 'models'> & {
+        files: Set<string>;
+        workspaces: Set<string>;
+        models: Map<string | null, number>;
+      }
     >();
     const allWorkspaces = new Set<string>();
     for (const r of rows) {
@@ -677,9 +684,12 @@ export class Index {
       let a = byAgent.get(name);
       if (!a) {
         a = { name, provider: null, count: 0, handoffs: 0, checkpoints: 0, notes: 0,
-              decisions: 0, openThreads: 0, files: new Set(), workspaces: new Set(), lastTs: '' };
+              decisions: 0, openThreads: 0, files: new Set(), workspaces: new Set(),
+              models: new Map(), lastTs: '' };
         byAgent.set(name, a);
       }
+      const model = r.model || null;
+      a.models.set(model, (a.models.get(model) ?? 0) + 1);
       a.count += 1;
       if (r.kind === 'handoff') a.handoffs += 1;
       else if (r.kind === 'session') a.checkpoints += 1;
@@ -697,7 +707,15 @@ export class Index {
       if (r.provider && !a.provider) a.provider = r.provider;
     }
     const agents = [...byAgent.values()]
-      .map((a) => ({ ...a, files: a.files.size, workspaces: a.workspaces.size }))
+      .map((a) => ({
+        ...a,
+        files: a.files.size,
+        workspaces: a.workspaces.size,
+        // Named models by usage first; the unattributed bucket always sinks to the bottom.
+        models: [...a.models.entries()]
+          .map(([model, count]) => ({ model, count }))
+          .sort((x, y) => (x.model === null ? 1 : y.model === null ? -1 : y.count - x.count)),
+      }))
       .sort((a, b) => b.count - a.count);
     return { agents, workspaces: allWorkspaces.size };
   }
