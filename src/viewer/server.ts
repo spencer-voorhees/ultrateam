@@ -140,18 +140,10 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
     for (const project of projects) {
       project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
     }
-    // Presentation prefs overlay (display name, folder color). Applied before
-    // the sort and the exact-name search below, so custom names behave like
-    // real names everywhere.
+    // Presentation prefs overlay: per-workspace folder color.
     const prefs = readAllPrefs();
-    for (const project of projects as Array<
-      (typeof projects)[number] & { customName: string | null; color: string | null; recordedName: string }
-    >) {
-      const p = prefs[project.id];
-      project.recordedName = project.name; // what the entries actually say — the rename UI's placeholder
-      project.customName = p?.name ?? null;
-      project.color = p?.color ?? null;
-      if (p?.name) project.name = p.name;
+    for (const project of projects as Array<(typeof projects)[number] & { color: string | null }>) {
+      project.color = prefs[project.id]?.color ?? null;
     }
     projects.sort((a, b) => b.lastTs.localeCompare(a.lastTs) || a.name.localeCompare(b.name));
     if (scope && !projects.some((p) => p.id === scope)) {
@@ -159,7 +151,7 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
       // when the user explicitly navigated to it; if we merely defaulted to the
       // launch directory, present everything instead of inventing a workspace.
       if (requestedScope && requestedScope !== 'all') {
-        projects.unshift({ id: scope, path: '', name: prefs[scope]?.name ?? 'Workspace', count: 0, lastTs: '', roots: [] });
+        projects.unshift({ id: scope, path: '', name: 'Workspace', count: 0, lastTs: '', roots: [] });
       } else {
         scope = null;
       }
@@ -219,7 +211,7 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
 }
 
 /**
- * POST /api/prefs — set a workspace's display name / folder color overrides.
+ * POST /api/prefs — set a workspace's folder color override.
  * JSON content-type is required: cross-origin JSON POSTs always trigger a CORS
  * preflight, which this server never approves, so browsers cannot forge one.
  */
@@ -245,8 +237,7 @@ function handlePrefsUpdate(req: http.IncomingMessage, res: http.ServerResponse):
         json(res, 400, { error: 'id is required' });
         return;
       }
-      const update: { name?: string | null; color?: string | null } = {};
-      if ('name' in parsed) update.name = parsed.name === null ? null : String(parsed.name);
+      const update: { color?: string | null } = {};
       if ('color' in parsed) update.color = parsed.color === null ? null : String(parsed.color);
       const all = updatePrefs(parsed.id, update);
       if (!all) {

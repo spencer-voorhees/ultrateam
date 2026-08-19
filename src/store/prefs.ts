@@ -18,11 +18,8 @@ export const WORKSPACE_COLORS = [
 export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];
 
 export interface WorkspacePrefs {
-  name?: string;
   color?: WorkspaceColor;
 }
-
-const MAX_NAME_LENGTH = 60;
 
 export function defaultPrefsPath(): string {
   return path.join(os.homedir(), '.ultrateam', 'workspace-prefs.json');
@@ -35,13 +32,10 @@ export function readAllPrefs(file: string = defaultPrefsPath()): Record<string, 
     const out: Record<string, WorkspacePrefs> = {};
     for (const [id, value] of Object.entries(parsed)) {
       if (typeof value !== 'object' || value === null) continue;
-      const prefs: WorkspacePrefs = {};
-      const { name, color } = value as Record<string, unknown>;
-      if (typeof name === 'string' && name.trim() !== '') prefs.name = name.trim().slice(0, MAX_NAME_LENGTH);
+      const { color } = value as Record<string, unknown>;
       if (typeof color === 'string' && (WORKSPACE_COLORS as readonly string[]).includes(color)) {
-        prefs.color = color as WorkspaceColor;
+        out[id] = { color: color as WorkspaceColor };
       }
-      if (prefs.name !== undefined || prefs.color !== undefined) out[id] = prefs;
     }
     return out;
   } catch {
@@ -50,28 +44,19 @@ export function readAllPrefs(file: string = defaultPrefsPath()): Record<string, 
 }
 
 /**
- * Merge one workspace's prefs and persist. `name: null`/`color: null` clears
- * that override; a workspace with nothing left is dropped from the file.
+ * Set or clear one workspace's folder color and persist. `color: null` clears
+ * the override; a workspace with nothing left is dropped from the file.
  * Returns the updated map, or null when the update is invalid.
  */
 export function updatePrefs(
   id: string,
-  update: { name?: string | null; color?: string | null },
+  update: { color?: string | null },
   file: string = defaultPrefsPath(),
 ): Record<string, WorkspacePrefs> | null {
   if (typeof id !== 'string' || id.trim() === '' || id.length > 200) return null;
   const all = readAllPrefs(file);
   const prefs: WorkspacePrefs = { ...all[id] };
 
-  if (update.name !== undefined) {
-    if (update.name === null || (typeof update.name === 'string' && update.name.trim() === '')) {
-      delete prefs.name;
-    } else if (typeof update.name === 'string') {
-      prefs.name = update.name.trim().slice(0, MAX_NAME_LENGTH);
-    } else {
-      return null;
-    }
-  }
   if (update.color !== undefined) {
     if (update.color === null) {
       delete prefs.color;
@@ -82,7 +67,7 @@ export function updatePrefs(
     }
   }
 
-  if (prefs.name === undefined && prefs.color === undefined) delete all[id];
+  if (prefs.color === undefined) delete all[id];
   else all[id] = prefs;
 
   // Atomic write so a crash never truncates the prefs file.

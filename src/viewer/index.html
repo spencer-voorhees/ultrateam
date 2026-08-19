@@ -870,17 +870,6 @@ span.ws-folder-tint > svg {
   flex-direction: column;
   gap: 0.55rem;
 }
-.ws-popover-input {
-  width: 100%;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 0.8rem;
-}
-.ws-popover-input:focus { outline: none; border-color: var(--text-tertiary); }
 .ws-popover-label {
   font-size: 0.66rem;
   font-weight: 600;
@@ -3067,12 +3056,8 @@ async function saveWorkspacePrefs(p, update) {
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     const proj = ((state.data && state.data.projects) || []).find((x) => x.id === p.id) || p;
-    if (update.name !== undefined) {
-      proj.customName = update.name;
-      proj.name = update.name ?? proj.recordedName ?? proj.name;
-    }
     if (update.color !== undefined) proj.color = update.color;
-    if (proj !== p) Object.assign(p, { customName: proj.customName, name: proj.name, color: proj.color });
+    if (proj !== p) p.color = proj.color;
     render();
   } catch (err) {
     showToast('Could not save workspace options: ' + err.message);
@@ -3081,23 +3066,6 @@ async function saveWorkspacePrefs(p, update) {
 
 function openWorkspacePopover(p, anchor) {
   closeWorkspacePopover();
-  const recorded = p.recordedName
-    || (p.path ? p.path.split(/[\\/]/).filter(Boolean).pop() : '')
-    || 'Workspace';
-  const input = h('input', {
-    class: 'ws-popover-input',
-    type: 'text',
-    placeholder: recorded,
-    value: p.customName ?? '',
-    maxlength: '60',
-    onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } },
-    // Commit on blur; an empty or unchanged-from-recorded value clears the override.
-    onblur: () => {
-      const v = input.value.trim();
-      const next = (v === '' || v === recorded) ? null : v;
-      if (next !== (p.customName ?? null)) void saveWorkspacePrefs(p, { name: next });
-    },
-  });
   const swatches = h('div', { class: 'ws-swatches' }, WS_COLORS.map((c) =>
     h('button', {
       class: `ws-swatch${c ? '' : ' none'}${(p.color ?? null) === c ? ' selected' : ''}`,
@@ -3112,9 +3080,7 @@ function openWorkspacePopover(p, anchor) {
       },
     })
   ));
-  wsPopover = h('div', { class: 'ws-popover', role: 'dialog', 'aria-label': `Options for ${recorded}` },
-    h('div', { class: 'ws-popover-label' }, 'Display name'),
-    input,
+  wsPopover = h('div', { class: 'ws-popover', role: 'dialog', 'aria-label': `Folder color for ${p.name}` },
     h('div', { class: 'ws-popover-label' }, 'Folder color'),
     swatches
   );
@@ -3129,7 +3095,6 @@ function openWorkspacePopover(p, anchor) {
     : `${r.bottom + 6}px`;
   document.addEventListener('pointerdown', onWsPopoverOutside, true);
   document.addEventListener('keydown', onWsPopoverKey, true);
-  input.focus();
 }
 
 // Map workspace roots to their folder color, for the feed chips and thread heads.
