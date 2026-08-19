@@ -795,6 +795,16 @@ html.sidebar-resizing .nav-bar {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Parent-path fragment shown only when two workspaces share a folder name. */
+.nav-item-hint {
+  min-width: 0;
+  flex: 0 1 auto;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .nav-count-pill {
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
@@ -2668,6 +2678,8 @@ function render({ animateStats = false } = {}) {
   const d = state.data;
   if (!d) return;
 
+  annotateProjectNames(d.projects);
+  state.workspaceLabelByPath = buildWorkspaceNameIndex(d);
   renderOverview(d, { animateStats });
   renderRoster(d);
   renderProjectNav(d);
@@ -2680,7 +2692,7 @@ function render({ animateStats = false } = {}) {
     ? 'No workspaces yet'
     : d.scope === 'all'
       ? 'All Workspaces'
-      : (scoped ? scoped.name : 'Workspace');
+      : (scoped ? projectLabel(scoped) : 'Workspace');
   $('#top-workspace').textContent = currentProjectName;
   document.title = 'ultrateam';
 }
@@ -2822,6 +2834,7 @@ function renderProjectNav(d) {
     const isActive = (state.scope === p.id) || (p.id === 'all' && state.scope === 'all');
     return h('button', {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
+      title: p.hint ? p.path : undefined,
       onclick: () => {
         state.scope = p.id;
         fetchState({ transition: true });
@@ -2829,7 +2842,8 @@ function renderProjectNav(d) {
     },
       h('div', { class: 'nav-item-left' },
         svgIcon('#icon-folder', 13, 13),
-        h('span', { class: 'nav-item-label' }, p.name)
+        h('span', { class: 'nav-item-label' }, p.name),
+        p.hint ? h('span', { class: 'nav-item-hint' }, p.hint) : null
       ),
       h('span', { class: 'nav-count-pill' }, String(p.count || 0))
     );
@@ -2897,13 +2911,49 @@ function renderFeed(d, { animateStats = false } = {}) {
 
 // Group entries into work threads by branch (the natural line of work), newest
 // thread first, entries within a thread oldest-first so the relay reads top-down.
+// Two workspaces can share a folder name (~/a/demo and ~/b/demo). When names
+// collide, give each colliding project a `hint`: the shortest trailing slice of
+// its parent path that tells them apart. Unique names get no hint.
+function annotateProjectNames(projects) {
+  const groups = new Map();
+  for (const p of (projects || [])) {
+    p.hint = '';
+    const group = groups.get(p.name) ?? [];
+    group.push(p);
+    groups.set(p.name, group);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    // The display name is not always the folder basename, so slice the full
+    // path; a hint that just re-states the name gets that suffix stripped.
+    const paths = group.map((p) => (p.path || '').split(/[\\/]/).filter(Boolean));
+    const maxDepth = Math.max(...paths.map((segs) => segs.length), 1);
+    for (let depth = 1; depth <= maxDepth; depth++) {
+      const hints = paths.map((segs) => segs.slice(-depth).join('/'));
+      if (new Set(hints).size !== group.length) continue; // still colliding — go deeper
+      group.forEach((p, i) => {
+        let hint = hints[i];
+        if (hint === p.name) hint = '';
+        else if (hint.endsWith('/' + p.name)) hint = hint.slice(0, -(p.name.length + 1));
+        p.hint = hint;
+      });
+      break;
+    }
+    // Identical full paths (legacy data): nothing path-based can tell them apart.
+  }
+}
+
+function projectLabel(p) {
+  return p.hint ? `${p.name} · ${p.hint}` : p.name;
+}
+
 // Map every known workspace root to its display name, so a thread can name the
 // workspace it belongs to even in the combined "All" view.
 function buildWorkspaceNameIndex(d) {
   const byPath = new Map();
   for (const p of (d.projects || [])) {
     const roots = (p.roots && p.roots.length) ? p.roots : [p.path];
-    for (const r of roots) if (r) byPath.set(r, p.name);
+    for (const r of roots) if (r) byPath.set(r, projectLabel(p));
   }
   return byPath;
 }
@@ -3146,7 +3196,7 @@ function renderCard(entry, d) {
       ) : null,
       d.scope === 'all' && entry.project ? h('span', { class: 'card-context-item' },
         svgIcon('#icon-folder', 10, 10),
-        h('span', {}, entry.project)
+        h('span', {}, state.workspaceLabelByPath?.get(entry.projectPath) || entry.project)
       ) : null
     ) : null,
 
