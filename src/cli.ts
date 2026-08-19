@@ -564,7 +564,10 @@ program
     console.log('ultrateam uninstalled. Cleanup will finish as this command exits.');
   });
 
-program.parseAsync().catch((err) => {
+// Explicit argv slice: commander's auto-detection sees process.versions.electron
+// (set inside the desktop app's utilityProcess children) and would assume no
+// script path in argv, misparsing the script as a subcommand.
+program.parseAsync(process.argv.slice(2), { from: 'user' }).catch((err) => {
   console.error(String(err));
   process.exit(1);
 });

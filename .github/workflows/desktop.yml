@@ -1,0 +1,43 @@
+name: desktop
+
+on:
+  push:
+    branches: [desktop-app]
+    paths: ['desktop/**', 'src/**', 'package.json', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            args: --mac dmg --arm64 --x64
+            artifact: ultrateam-mac
+            glob: 'desktop/release/*.dmg'
+          - os: windows-latest
+            args: --win nsis --x64
+            artifact: ultrateam-win
+            glob: 'desktop/release/*.exe'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build core
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Build desktop app (unsigned)
+        working-directory: desktop
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/stage-core.mjs
+          npx electron-builder ${{ matrix.args }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.glob }}
+          if-no-files-found: error
