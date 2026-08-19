@@ -2191,7 +2191,7 @@ html.sidebar-resizing .nav-bar {
       <svg class="search-icon-svg" viewBox="0 0 24 24"><use href="#icon-search"/></svg>
       <input type="search" id="search-input" class="search-box" placeholder="Search entries, decisions, files…" autocomplete="off" spellcheck="false" aria-label="Search entries">
       <button id="search-clear" class="search-clear-btn" title="Clear search">✕</button>
-      <span class="search-shortcut">⌘K</span>
+      <span class="search-shortcut" id="search-shortcut">⌘K</span>
     </div>
   </div>
 
@@ -3214,7 +3214,7 @@ function renderThreadedFeed(entries, d) {
       }
     }
     const workspace = g.workspace || names.get(g.projectPath) || '';
-    return { key, branch: g.branch, workspace, entries: sorted, lastTs, relay };
+    return { key, branch: g.branch, projectPath: g.projectPath, workspace, entries: sorted, lastTs, relay };
   }).sort((a, b) => b.lastTs.localeCompare(a.lastTs));
 
   // Remember the current thread keys so "expand/collapse all" can act on them.
@@ -3977,6 +3977,11 @@ try {
     }
   }
 } catch (e) {}
+
+// The search handler accepts both ⌘K and Ctrl+K; label whichever this platform uses.
+if (!/Mac|iP(hone|ad|od)/.test(navigator.platform)) {
+  $('#search-shortcut').textContent = 'Ctrl K';
+}
 
 fetchState();
 // Warm the "All" snapshot so switching to any workspace can filter it instantly,
