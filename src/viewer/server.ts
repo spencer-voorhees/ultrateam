@@ -208,6 +208,7 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
       entries: results.map((r) => ({
         ...r.entry,
         projectPath: r.projectPath,
+        workspaceId: r.workspaceId,
         meta: agentMeta(r.entry.agent.name),
       })),
     }, headOnly);

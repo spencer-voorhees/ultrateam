@@ -37,6 +37,7 @@ export interface RecallOptions {
 export interface ScoredEntry {
   entry: Entry;
   projectPath: string;
+  workspaceId: string;
   score: number;
 }
 
@@ -371,7 +372,7 @@ export class Index {
       | EntryRow
       | undefined;
     if (!row) return null;
-    return { entry: rowToEntry(row), projectPath: row.project_path, score: 0 };
+    return { entry: rowToEntry(row), projectPath: row.project_path, workspaceId: row.workspace_id, score: 0 };
   }
 
   list(opts: { projectPath?: string; workspaceId?: string; limit?: number } = {}): ScoredEntry[] {
@@ -388,7 +389,7 @@ export class Index {
             .prepare(`SELECT * FROM entries GROUP BY id ORDER BY ts DESC LIMIT ?`)
             .all(limit)
     ) as unknown as EntryRow[];
-    return rows.map((r) => ({ entry: rowToEntry(r), projectPath: r.project_path, score: 0 }));
+    return rows.map((r) => ({ entry: rowToEntry(r), projectPath: r.project_path, workspaceId: r.workspace_id, score: 0 }));
   }
 
   /** Latest portable execution state, preferring the current branch when timestamps tie in relevance. */
@@ -409,7 +410,7 @@ export class Index {
       )
       .get(...params, ...branchParams) as EntryRow | undefined;
     if (!row) return null;
-    return { entry: rowToEntry(row), projectPath: row.project_path, score: 0 };
+    return { entry: rowToEntry(row), projectPath: row.project_path, workspaceId: row.workspace_id, score: 0 };
   }
 
   resumeById(id: string, opts: { projectPath?: string; workspaceId?: string } = {}): ScoredEntry | null {
@@ -425,7 +426,7 @@ export class Index {
           ).get(id)
     ) as EntryRow | undefined;
     if (!row) return null;
-    return { entry: rowToEntry(row), projectPath: row.project_path, score: 0 };
+    return { entry: rowToEntry(row), projectPath: row.project_path, workspaceId: row.workspace_id, score: 0 };
   }
 
   /**
@@ -534,7 +535,7 @@ export class Index {
       // Handoffs are written to be resumed from; nudge them upward.
       if (entry.kind === 'handoff') score += 1;
 
-      scored.push({ entry, projectPath: row.project_path, score });
+      scored.push({ entry, projectPath: row.project_path, workspaceId: row.workspace_id, score });
     }
 
     scored.sort((a, b) => b.score - a.score || b.entry.ts.localeCompare(a.entry.ts));

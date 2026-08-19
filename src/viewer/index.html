@@ -2641,7 +2641,9 @@ function deriveScopedView(source, scopeId) {
   const proj = source.projects.find((p) => p.id === scopeId);
   if (!proj) return null;
   const roots = new Set((proj.roots && proj.roots.length) ? proj.roots : [proj.path]);
-  const entries = (source.entries || []).filter((e) => roots.has(e.projectPath));
+  // Workspace id is the reliable join; the path check covers cached snapshots
+  // from servers that did not yet send entry.workspaceId.
+  const entries = (source.entries || []).filter((e) => e.workspaceId === scopeId || roots.has(e.projectPath));
   const agents = new Map();
   for (const e of entries) {
     const nm = e.agent && e.agent.name;
@@ -2784,6 +2786,8 @@ function render({ animateStats = false } = {}) {
   annotateProjectNames(d.projects);
   state.workspaceLabelByPath = buildWorkspaceNameIndex(d);
   state.workspaceColorByPath = buildWorkspaceColorIndex(d);
+  state.workspaceLabelById = new Map((d.projects || []).map((p) => [p.id, projectLabel(p)]));
+  state.workspaceColorById = new Map((d.projects || []).filter((p) => p.color).map((p) => [p.id, p.color]));
   renderOverview(d, { animateStats });
   renderRoster(d);
   renderProjectNav(d);
@@ -3134,6 +3138,23 @@ function buildWorkspaceColorIndex(d) {
   return byPath;
 }
 
+// Workspace id is the join the index actually guarantees — entries can carry a
+// checkout path that is no longer in the workspace's current roots (moved,
+// re-cased, or deleted checkouts), so path equality is only the fallback
+// for cached snapshots that predate entry.workspaceId.
+function workspaceColorFor(workspaceId, projectPath) {
+  const byId = state.workspaceColorById;
+  return (workspaceId && byId && byId.get(workspaceId))
+    || (state.workspaceColorByPath && state.workspaceColorByPath.get(projectPath))
+    || null;
+}
+function workspaceLabelFor(workspaceId, projectPath) {
+  const byId = state.workspaceLabelById;
+  return (workspaceId && byId && byId.get(workspaceId))
+    || (state.workspaceLabelByPath && state.workspaceLabelByPath.get(projectPath))
+    || null;
+}
+
 // Two workspaces can share a folder name (~/a/demo and ~/b/demo). When names
 // collide, give each colliding project a `hint`: the shortest trailing slice of
 // its parent path that tells them apart. Unique names get no hint.
@@ -3195,9 +3216,17 @@ function renderThreadedFeed(entries, d) {
     // Keep a genuine null branch (non-git workspace) null — don't fabricate "main".
     const branch = (e.branch && String(e.branch).trim()) ? String(e.branch).trim() : null;
     const key = threadKey(e.projectPath, branch);
-    // Prefer the names map: it carries custom display names and collision hints;
+    // Prefer the display-name maps: they carry custom names and collision hints;
     // the entry's recorded project field is the fallback.
-    if (!groups.has(key)) groups.set(key, { branch, projectPath: e.projectPath, workspace: names.get(e.projectPath) || e.project || '', entries: [] });
+    if (!groups.has(key)) {
+      groups.set(key, {
+        branch,
+        projectPath: e.projectPath,
+        workspaceId: e.workspaceId,
+        workspace: workspaceLabelFor(e.workspaceId, e.projectPath) || e.project || '',
+        entries: [],
+      });
+    }
     groups.get(key).entries.push(e);
   }
   const groupArr = [...groups.entries()].map(([key, g]) => {
@@ -3214,7 +3243,7 @@ function renderThreadedFeed(entries, d) {
       }
     }
     const workspace = g.workspace || names.get(g.projectPath) || '';
-    return { key, branch: g.branch, projectPath: g.projectPath, workspace, entries: sorted, lastTs, relay };
+    return { key, branch: g.branch, projectPath: g.projectPath, workspaceId: g.workspaceId, workspace, entries: sorted, lastTs, relay };
   }).sort((a, b) => b.lastTs.localeCompare(a.lastTs));
 
   // Remember the current thread keys so "expand/collapse all" can act on them.
@@ -3249,8 +3278,8 @@ function renderThreadGroup(g, d) {
       g.workspace ? h('span', { class: 'thread-workspace' },
         h('span', {
           class: 'ws-folder-tint',
-          style: state.workspaceColorByPath?.get(g.projectPath)
-            ? `color: var(--ws-${state.workspaceColorByPath.get(g.projectPath)});`
+          style: workspaceColorFor(g.workspaceId, g.projectPath)
+            ? `color: var(--ws-${workspaceColorFor(g.workspaceId, g.projectPath)});`
             : undefined,
         }, svgIcon('#icon-folder', 11, 11)),
         h('span', {}, g.workspace)) : null,
@@ -3429,11 +3458,11 @@ function renderCard(entry, d) {
       d.scope === 'all' && entry.project ? h('span', { class: 'card-context-item' },
         h('span', {
           class: 'ws-folder-tint',
-          style: state.workspaceColorByPath?.get(entry.projectPath)
-            ? `color: var(--ws-${state.workspaceColorByPath.get(entry.projectPath)});`
+          style: workspaceColorFor(entry.workspaceId, entry.projectPath)
+            ? `color: var(--ws-${workspaceColorFor(entry.workspaceId, entry.projectPath)});`
             : undefined,
         }, svgIcon('#icon-folder', 10, 10)),
-        h('span', {}, state.workspaceLabelByPath?.get(entry.projectPath) || entry.project)
+        h('span', {}, workspaceLabelFor(entry.workspaceId, entry.projectPath) || entry.project)
       ) : null
     ) : null,
 
