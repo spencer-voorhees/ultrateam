@@ -326,6 +326,14 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
 .search-clear-btn:hover {
   color: var(--text-primary);
 }
+/* Once a query is typed the ✕ takes over — hide the shortcut hint (it can be
+   wider than ⌘K, e.g. "Ctrl K") and let the ✕ move into its spot. */
+.search-box:not(:placeholder-shown) ~ .search-shortcut {
+  display: none;
+}
+.search-box:not(:placeholder-shown) ~ .search-clear-btn {
+  right: 0.65rem;
+}
 
 .nav-right {
   display: flex;
