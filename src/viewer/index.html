@@ -2694,6 +2694,7 @@ function render({ animateStats = false } = {}) {
       ? 'All Workspaces'
       : (scoped ? projectLabel(scoped) : 'Workspace');
   $('#top-workspace').textContent = currentProjectName;
+  $('#top-workspace').title = (d.scope !== 'all' && scoped && scoped.path) ? scoped.path : '';
   document.title = 'ultrateam';
 }
 
@@ -2834,7 +2835,10 @@ function renderProjectNav(d) {
     const isActive = (state.scope === p.id) || (p.id === 'all' && state.scope === 'all');
     return h('button', {
       class: `nav-item-btn ${isActive ? 'active' : ''}`,
-      title: p.path || undefined,
+      // Tooltip only where there's ambiguity to resolve — hovering every row
+      // while scanning the list shouldn't pop paths. The top-bar title always
+      // carries the selected workspace's path.
+      title: p.hint ? p.path : undefined,
       onclick: () => {
         state.scope = p.id;
         fetchState({ transition: true });
