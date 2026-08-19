@@ -797,6 +797,11 @@ html.sidebar-resizing .nav-bar {
   display: inline-flex;
   flex: 0 0 auto;
 }
+/* Direct svg rules (e.g. .thread-workspace svg) outrank inherited color; this
+   higher-specificity rule routes the icon back to the tint span's color. */
+span.ws-folder-tint > svg {
+  color: inherit;
+}
 .nav-item-label {
   min-width: 0;
   white-space: nowrap;
