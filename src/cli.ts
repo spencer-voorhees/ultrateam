@@ -25,7 +25,7 @@ import { execSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
-import { durableWorkspaceRoot, rootsInWorkspace } from './workspace.js';
+import { checkoutOrigin, durableWorkspaceRoot, rootsInWorkspace } from './workspace.js';
 import { createResumeState, resumableState } from './resume.js';
 import { createInterface } from 'node:readline/promises';
 import {
@@ -285,6 +285,7 @@ program
     const storeRoot = durableWorkspaceRoot(root); // survive throwaway checkouts
     const entry = createEntry({
       project: path.basename(storeRoot),
+      origin: checkoutOrigin(root),
       branch: currentBranch(root),
       agent: { name: opts.agent, model: opts.model },
       kind: opts.kind,

@@ -539,6 +539,7 @@ body.sidebar-shelved .top-nav-brand .ultrateam-logo-icon {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.ws-origin-mark { color: var(--text-tertiary); cursor: default; }
 /* Unattributed entries read as absence, not as another model. */
 .usage-model-row:has(.usage-model-none) .usage-model-bar-fill {
   background: var(--text-tertiary);
@@ -2151,6 +2152,14 @@ span.ws-folder-tint > svg {
       <path fill="currentColor" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
     </symbol>
     <!-- Git Branch Icon (Lucide git-branch) -->
+    <symbol id="icon-worktree" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 3h5v5"/>
+        <path d="M8 3H3v5"/>
+        <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/>
+        <path d="m15 9 6-6"/>
+      </g>
+    </symbol>
     <symbol id="icon-branch" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="6" y1="3" x2="6" y2="15"/>
@@ -3542,11 +3551,17 @@ function renderCard(entry, d) {
       }, entry.title)
     ),
     h('p', { class: 'card-summary' }, entry.summary),
-    (entry.branch || (d.scope === 'all' && entry.project)) ? h('div', { class: 'card-context-row' },
+    (entry.branch || entry.origin || (d.scope === 'all' && entry.project)) ? h('div', { class: 'card-context-row' },
       entry.branch ? h('span', { class: 'card-context-item' },
         svgIcon('#icon-branch', 10, 10),
         h('span', {}, entry.branch)
       ) : null,
+      // Quiet provenance marker: this entry was written from a throwaway
+      // checkout (worktree/clone); the tooltip carries the checkout details.
+      entry.origin ? h('span', {
+        class: 'card-context-item ws-origin-mark',
+        title: `written from ${entry.origin.kind} ${entry.origin.name} · ${entry.origin.path}`,
+      }, svgIcon('#icon-worktree', 10, 10)) : null,
       d.scope === 'all' && entry.project ? h('span', { class: 'card-context-item' },
         h('span', {
           class: 'ws-folder-tint',
@@ -3720,6 +3735,7 @@ function formatEntryText(entry) {
   add('Files', entry.files);
   add('Open threads recorded at handoff', entry.open_threads);
   add('Tags', entry.tags);
+  if (entry.origin) lines.push('', `Written from ${entry.origin.kind}: ${entry.origin.name} (${entry.origin.path})`);
   return lines.join('\n');
 }
 

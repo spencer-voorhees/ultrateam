@@ -17,7 +17,7 @@ import { normalizeAgentName } from './agents/registry.js';
 import { formatEntry, formatResume } from './format.js';
 import { VERSION } from './version.js';
 import { knownRoots } from './store/roots.js';
-import { durableWorkspaceRoot, rootsInWorkspace } from './workspace.js';
+import { checkoutOrigin, durableWorkspaceRoot, rootsInWorkspace } from './workspace.js';
 import { createResumeState, resumableState } from './resume.js';
 
 const NUDGE =
@@ -66,6 +66,9 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   // state still come from the actual checkout the agent worked in.
   const storeRoot = durableWorkspaceRoot(root);
   const project = path.basename(storeRoot);
+  // Provenance stamped on every entry written from a throwaway checkout — it
+  // cannot be reconstructed once the checkout is deleted.
+  const origin = checkoutOrigin(root);
   const index = new Index();
   // One-shot migration: a store this checkout accumulated before durable homes
   // existed moves into the parent now, before the checkout can be deleted.
@@ -126,6 +129,7 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   ): string {
     const entry = createEntry({
       project,
+      origin,
       branch: currentBranch(root),
       agent: callerAgent(args.agent_name, args.model),
       kind,

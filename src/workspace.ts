@@ -104,10 +104,10 @@ export function workspaceIdentity(root: string, depth: number = 0): WorkspaceIde
  * delete when done — resolve to the repository they came from, so entries
  * written there survive the checkout's deletion. A normal repo is its own home.
  */
-export function durableWorkspaceRoot(root: string, depth: number = 0): string {
-  const resolvedRoot = canonicalPath(root);
-  if (depth >= 3) return resolvedRoot;
+export type CheckoutKind = 'worktree' | 'clone';
 
+/** One resolution hop: is this checkout a throwaway of some other local repo? */
+function checkoutHop(resolvedRoot: string): { next: string; kind: CheckoutKind } | null {
   // Linked worktree: its own git dir differs from the common dir, which lives
   // under the main working tree as <main>/.git.
   const gitDir = git(resolvedRoot, ['rev-parse', '--git-dir']);
@@ -118,7 +118,7 @@ export function durableWorkspaceRoot(root: string, depth: number = 0): string {
     const common = abs(commonDir);
     if (own !== common && path.basename(common) === '.git') {
       const main = path.dirname(common);
-      if (fs.existsSync(main)) return durableWorkspaceRoot(main, depth + 1);
+      if (fs.existsSync(main)) return { next: main, kind: 'worktree' };
     }
   }
 
@@ -131,12 +131,38 @@ export function durableWorkspaceRoot(root: string, depth: number = 0): string {
       const normalized = normalizeGitRemote(remote, resolvedRoot);
       if (normalized.startsWith('file:')) {
         const target = normalized.slice('file:'.length);
-        if (fs.existsSync(path.join(target, '.git'))) return durableWorkspaceRoot(target, depth + 1);
+        if (fs.existsSync(path.join(target, '.git'))) return { next: target, kind: 'clone' };
       }
     }
   }
 
-  return resolvedRoot;
+  return null;
+}
+
+export function durableWorkspaceRoot(root: string, depth: number = 0): string {
+  const resolvedRoot = canonicalPath(root);
+  if (depth >= 3) return resolvedRoot;
+  const hop = checkoutHop(resolvedRoot);
+  return hop ? durableWorkspaceRoot(hop.next, depth + 1) : resolvedRoot;
+}
+
+export interface CheckoutOrigin {
+  kind: CheckoutKind;
+  /** The throwaway checkout's own folder name and canonical path. */
+  name: string;
+  path: string;
+}
+
+/**
+ * Describe a checkout that is NOT its own durable home — the provenance an
+ * entry written there should carry, since it cannot be reconstructed once the
+ * checkout is deleted. Returns null for a repo that is its own home.
+ */
+export function checkoutOrigin(root: string): CheckoutOrigin | null {
+  const resolvedRoot = canonicalPath(root);
+  const hop = checkoutHop(resolvedRoot);
+  if (!hop) return null;
+  return { kind: hop.kind, name: path.basename(resolvedRoot), path: resolvedRoot };
 }
 
 export function isWorkspaceId(value: string): boolean {

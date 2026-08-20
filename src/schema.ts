@@ -31,10 +31,18 @@ export const ResumeStateSchema = z.object({
   git: GitStateSchema.optional(),
 });
 
+/** Provenance for entries written from a throwaway checkout (worktree/clone). */
+export const EntryOriginSchema = z.object({
+  kind: z.enum(['worktree', 'clone']),
+  name: z.string().min(1),
+  path: z.string().min(1),
+});
+
 export const EntrySchema = z.object({
   id: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, 'must be a ULID'),
   ts: z.string().datetime(),
   project: z.string().min(1),
+  origin: EntryOriginSchema.nullable().default(null),
   branch: z.string().nullable().default(null),
   agent: AgentInfoSchema,
   kind: EntryKindSchema.default('session'),
@@ -52,6 +60,7 @@ export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 export type EntryKind = z.infer<typeof EntryKindSchema>;
 export type GitState = z.infer<typeof GitStateSchema>;
 export type ResumeState = z.infer<typeof ResumeStateSchema>;
+export type EntryOrigin = z.infer<typeof EntryOriginSchema>;
 
 export type NewEntryInput = Omit<z.input<typeof EntrySchema>, 'id' | 'ts'>;
 

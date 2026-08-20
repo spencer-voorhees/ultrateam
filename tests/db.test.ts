@@ -313,7 +313,7 @@ test('an older disposable index is rebuilt with workspace identity', () => {
   const columns = index.db.prepare('PRAGMA table_info(entries)').all() as unknown as Array<{ name: string }>;
   const version = index.db.prepare('PRAGMA user_version').get() as { user_version: number };
   assert.ok(columns.some((column) => column.name === 'workspace_id'));
-  assert.equal(version.user_version, 3);
+  assert.equal(version.user_version, 4);
   index.close();
 });
 
@@ -466,5 +466,19 @@ test('contributions aggregates per agent across all entries, uncapped', () => {
   assert.equal(scoped.workspaces, 1);
   assert.equal(scoped.agents.length, 1);
   assert.equal(scoped.agents[0].name, 'cursor');
+  index.close();
+});
+
+test('entry origin round-trips through the index', () => {
+  const index = tempIndex();
+  const origin = { kind: 'worktree' as const, name: 'wt-abc123', path: '/tmp/repo/wt-abc123' };
+  index.upsert(makeEntry({ origin }), '/proj');
+  index.upsert(makeEntry({ title: 'No origin' }), '/proj');
+
+  const rows = index.list({ projectPath: '/proj', limit: 10 });
+  const withOrigin = rows.find((r) => r.entry.title === 'Generic work');
+  const without = rows.find((r) => r.entry.title === 'No origin');
+  assert.deepEqual(withOrigin?.entry.origin, origin);
+  assert.equal(without?.entry.origin, null);
   index.close();
 });
