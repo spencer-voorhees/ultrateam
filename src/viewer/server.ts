@@ -6,10 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Index, type ScoredEntry } from '../store/db.js';
-import { findProjectRoot, isUltrateamInstallDirectory } from '../store/jsonl.js';
+import { findProjectRoot, isUltrateamInstallDirectory, migrateStoreTo } from '../store/jsonl.js';
 import { knownRoots, unregisterRoot } from '../store/roots.js';
 import { agentMeta } from '../agents/registry.js';
-import { workspaceIdentity } from '../workspace.js';
+import { durableWorkspaceRoot, workspaceIdentity } from '../workspace.js';
 import { readAllPrefs, updatePrefs, WORKSPACE_COLORS } from '../store/prefs.js';
 
 export interface ViewerOptions {
@@ -67,6 +67,17 @@ function reindexKnownRoots(index: Index): void {
 // for every known root on every /api/state call cost ~200ms. Identity is stable
 // for a repo, so memoize it for the life of the viewer process.
 const identityCache = new Map<string, string>();
+// Durable-home resolution spawns git subprocesses — cache per process lifetime,
+// same rationale as identityCache (a per-request recompute was the perf trap).
+const durableCache = new Map<string, string>();
+function cachedDurableRoot(root: string): string {
+  let durable = durableCache.get(root);
+  if (durable === undefined) {
+    durable = durableWorkspaceRoot(root);
+    durableCache.set(root, durable);
+  }
+  return durable;
+}
 function cachedWorkspaceId(root: string): string {
   let id = identityCache.get(root);
   if (id === undefined) {
@@ -125,6 +136,14 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
       if (now - (lastIndexed.get(root) ?? 0) <= REINDEX_INTERVAL_MS) continue;
       lastIndexed.set(root, now);
       try {
+        // A throwaway checkout (worktree/local clone) with a leftover store
+        // folds into its durable home before indexing, so the memory survives
+        // the checkout's eventual deletion. One-shot: the source store is gone
+        // after a clean migration.
+        const durable = cachedDurableRoot(root);
+        if (durable !== root && migrateStoreTo(root, durable) > 0) {
+          index.indexProject(durable);
+        }
         index.indexProject(root);
       } catch {
         // serve whatever the index already has

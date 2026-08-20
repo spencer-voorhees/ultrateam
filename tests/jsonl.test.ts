@@ -7,6 +7,7 @@ import { createEntry } from '../src/schema.js';
 import {
   appendEntry,
   readEntries,
+  migrateStoreTo,
   findProjectRoot,
   entriesPath,
   isUltrateamInstallDirectory,
@@ -92,4 +93,26 @@ test('the ultrateam installation checkout is never a project root', () => {
     if (previous === undefined) delete process.env.ULTRATEAM_HOME;
     else process.env.ULTRATEAM_HOME = previous;
   }
+});
+
+test('migrateStoreTo folds a throwaway store into the durable home once', () => {
+  const from = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-migrate-from-'));
+  const to = fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-migrate-to-'));
+  const a = createEntry({ project: 'wt', agent: { name: 'claude-code' }, title: 'A', summary: 's' });
+  const b = createEntry({ project: 'wt', agent: { name: 'claude-code' }, title: 'B', summary: 's' });
+  appendEntry(from, a);
+  appendEntry(from, b);
+  appendEntry(to, a); // already known at the destination — must not duplicate
+
+  assert.equal(migrateStoreTo(from, to), 2);
+  const target = readEntries(to);
+  assert.deepEqual(target.entries.map((e) => e.id).sort(), [a.id, b.id].sort());
+  assert.equal(target.entries.length, 2);
+  // Clean migration removes the source store entirely.
+  assert.equal(fs.existsSync(path.join(from, '.ultrateam')), false);
+
+  // Same directory (even via differing path spellings) is a strict no-op.
+  appendEntry(from, a);
+  assert.equal(migrateStoreTo(from, path.join(from, '.', '.')), 0);
+  assert.equal(fs.existsSync(path.join(from, '.ultrateam')), true);
 });

@@ -63,6 +63,41 @@ export interface ReadResult {
   skipped: number;
 }
 
+/**
+ * Fold one checkout's store into another (a throwaway worktree/clone into its
+ * durable home): append entries the target doesn't have, then remove the
+ * source store so the migration is one-shot. When the source has unparseable
+ * lines, the good entries are copied but the source file is kept — never
+ * destroy bytes that could not be carried over. Returns entries moved.
+ */
+export function migrateStoreTo(fromRoot: string, toRoot: string): number {
+  const canon = (p: string): string => {
+    const resolved = path.resolve(p);
+    try {
+      return fs.realpathSync.native(resolved);
+    } catch {
+      return resolved;
+    }
+  };
+  const from = path.resolve(fromRoot);
+  const to = path.resolve(toRoot);
+  // Realpath equality guard: the same directory reached via a symlink alias
+  // (/var vs /private/var) must be a no-op, or we would delete the very store
+  // we "migrated" into itself.
+  if (canon(from) === canon(to)) return 0;
+  const source = readEntries(from);
+  if (source.entries.length > 0) {
+    const existing = new Set(readEntries(to).entries.map((e) => e.id));
+    for (const entry of source.entries) {
+      if (!existing.has(entry.id)) appendEntry(to, entry);
+    }
+  }
+  if (source.skipped === 0) {
+    fs.rmSync(path.join(from, STORE_DIR), { recursive: true, force: true });
+  }
+  return source.entries.length;
+}
+
 export function readEntries(root: string): ReadResult {
   const file = entriesPath(root);
   if (!fs.existsSync(file)) return { entries: [], skipped: 0 };

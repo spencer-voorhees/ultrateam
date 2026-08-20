@@ -10,7 +10,7 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createEntry, type AgentInfo } from './schema.js';
-import { findProjectRoot, appendEntry } from './store/jsonl.js';
+import { findProjectRoot, appendEntry, migrateStoreTo } from './store/jsonl.js';
 import { Index } from './store/db.js';
 import { currentBranch } from './git.js';
 import { normalizeAgentName } from './agents/registry.js';
@@ -67,6 +67,14 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
   const storeRoot = durableWorkspaceRoot(root);
   const project = path.basename(storeRoot);
   const index = new Index();
+  // One-shot migration: a store this checkout accumulated before durable homes
+  // existed moves into the parent now, before the checkout can be deleted.
+  try {
+    const moved = migrateStoreTo(root, storeRoot);
+    if (moved > 0) console.error(`[ultrateam] moved ${moved} entries from ${root} into ${storeRoot}`);
+  } catch (err) {
+    console.error(`[ultrateam] store migration failed (entries stay in ${root}): ${String(err)}`);
+  }
 
   function indexCurrentWorkspace(): void {
     for (const workspaceRoot of rootsInWorkspace(root, knownRoots())) {
