@@ -2575,17 +2575,41 @@ function renderStatsSkeleton() {
 
 async function loadStats() {
   const body = $('#usage-drawer-body');
-  setChildren(body, ...renderStatsSkeleton());
+  // Paint instantly from the cached report; the fresh fetch trues it up in the
+  // background. The skeleton only appears on the very first open of a session.
+  let served = false;
+  try {
+    const cached = sessionStorage.getItem('ut-contributions-cache');
+    if (cached) {
+      statsState.lastRaw = cached;
+      renderStats(JSON.parse(cached));
+      served = true;
+    }
+  } catch (e) {}
+  if (!served) setChildren(body, ...renderStatsSkeleton());
   try {
     // The server aggregates over ALL entries (never the capped feed), so counts
     // reflect the whole history rather than the recent 200 shown in the feed.
-    const report = await (await fetch('/api/contributions')).json();
+    const raw = await (await fetch('/api/contributions')).text();
+    try { sessionStorage.setItem('ut-contributions-cache', raw); } catch (e) {}
     if (!statsState.open) return;
-    renderStats(report);
+    if (raw !== statsState.lastRaw) {
+      statsState.lastRaw = raw;
+      renderStats(JSON.parse(raw));
+    }
   } catch (err) {
-    setChildren(body, h('div', { class: 'usage-empty' }, 'Could not load contributions: ' + err.message));
+    if (!served) setChildren(body, h('div', { class: 'usage-empty' }, 'Could not load contributions: ' + err.message));
   }
 }
+
+// Warm the contributions cache shortly after load, so even the first open of
+// the pane paints instantly.
+setTimeout(() => {
+  fetch('/api/contributions')
+    .then((r) => r.text())
+    .then((raw) => { try { sessionStorage.setItem('ut-contributions-cache', raw); } catch (e) {} })
+    .catch(() => {});
+}, 1500);
 
 function renderStats(report) {
   statsState.lastReport = report; // kept so expand/collapse can re-render without refetching
