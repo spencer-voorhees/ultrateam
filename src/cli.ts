@@ -25,7 +25,7 @@ import { execSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
-import { rootsInWorkspace } from './workspace.js';
+import { durableWorkspaceRoot, rootsInWorkspace } from './workspace.js';
 import { createResumeState, resumableState } from './resume.js';
 import { createInterface } from 'node:readline/promises';
 import {
@@ -282,8 +282,9 @@ program
   .option('--commands <items>', 'comma-separated useful continuation commands', csv, [])
   .action((opts) => {
     const root = requireRoot();
+    const storeRoot = durableWorkspaceRoot(root); // survive throwaway checkouts
     const entry = createEntry({
-      project: path.basename(root),
+      project: path.basename(storeRoot),
       branch: currentBranch(root),
       agent: { name: opts.agent, model: opts.model },
       kind: opts.kind,
@@ -305,9 +306,9 @@ program
         commands: opts.commands,
       }),
     });
-    appendEntry(root, entry);
+    appendEntry(storeRoot, entry);
     const index = new Index();
-    index.upsert(entry, root);
+    index.upsert(entry, storeRoot);
     index.close();
     console.log(`Logged ${entry.id}: ${entry.title}`);
   });

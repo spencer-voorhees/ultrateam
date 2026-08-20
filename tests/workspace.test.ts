@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { normalizeGitRemote, rootsInWorkspace, workspaceIdentity } from '../src/workspace.js';
+import { durableWorkspaceRoot, normalizeGitRemote, rootsInWorkspace, workspaceIdentity } from '../src/workspace.js';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ultrateam-workspace-'));
@@ -58,6 +58,22 @@ test('a git worktree shares its parent repository workspace', () => {
   git(parent, ['commit', '--allow-empty', '-m', 'x']);
   git(parent, ['worktree', 'add', '-q', path.join(parent, 'wt-random')]);
   assert.equal(workspaceIdentity(path.join(parent, 'wt-random')).id, workspaceIdentity(parent).id);
+});
+
+test('durableWorkspaceRoot resolves throwaway checkouts to the parent repo', () => {
+  const parent = tempDir();
+  git(parent, ['init']);
+  git(parent, ['commit', '--allow-empty', '-m', 'x']);
+  git(parent, ['worktree', 'add', '-q', path.join(parent, 'wt-tmp')]);
+  const cloneDir = path.join(tempDir(), 'clone-tmp');
+  execFileSync('git', ['clone', '-q', parent, cloneDir], { stdio: 'ignore' });
+
+  const realParent = fs.realpathSync.native(parent);
+  assert.equal(durableWorkspaceRoot(parent), realParent);            // a repo is its own home
+  assert.equal(durableWorkspaceRoot(path.join(parent, 'wt-tmp')), realParent); // worktree → parent
+  assert.equal(durableWorkspaceRoot(cloneDir), realParent);          // local clone → parent
+  const plain = tempDir();
+  assert.equal(durableWorkspaceRoot(plain), fs.realpathSync.native(plain)); // non-git stays put
 });
 
 test('unrelated local repositories stay separate unless explicitly linked', () => {

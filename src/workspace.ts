@@ -98,6 +98,47 @@ export function workspaceIdentity(root: string, depth: number = 0): WorkspaceIde
   return { id: stableId(`path:${resolvedRoot}`), source: 'path' };
 }
 
+/**
+ * The durable home for a checkout's memory. Throwaway checkouts — linked git
+ * worktrees and local clones, which agent apps create under random names and
+ * delete when done — resolve to the repository they came from, so entries
+ * written there survive the checkout's deletion. A normal repo is its own home.
+ */
+export function durableWorkspaceRoot(root: string, depth: number = 0): string {
+  const resolvedRoot = canonicalPath(root);
+  if (depth >= 3) return resolvedRoot;
+
+  // Linked worktree: its own git dir differs from the common dir, which lives
+  // under the main working tree as <main>/.git.
+  const gitDir = git(resolvedRoot, ['rev-parse', '--git-dir']);
+  const commonDir = git(resolvedRoot, ['rev-parse', '--git-common-dir']);
+  if (gitDir && commonDir) {
+    const abs = (p: string): string => canonicalPath(path.resolve(resolvedRoot, p));
+    const own = abs(gitDir);
+    const common = abs(commonDir);
+    if (own !== common && path.basename(common) === '.git') {
+      const main = path.dirname(common);
+      if (fs.existsSync(main)) return durableWorkspaceRoot(main, depth + 1);
+    }
+  }
+
+  // Local clone: origin is a repo path on this machine with a working tree.
+  const remotes = git(resolvedRoot, ['remote'])?.split(/\r?\n/).filter(Boolean) ?? [];
+  const remoteName = remotes.includes('origin') ? 'origin' : remotes.sort()[0];
+  if (remoteName) {
+    const remote = git(resolvedRoot, ['remote', 'get-url', remoteName]);
+    if (remote) {
+      const normalized = normalizeGitRemote(remote, resolvedRoot);
+      if (normalized.startsWith('file:')) {
+        const target = normalized.slice('file:'.length);
+        if (fs.existsSync(path.join(target, '.git'))) return durableWorkspaceRoot(target, depth + 1);
+      }
+    }
+  }
+
+  return resolvedRoot;
+}
+
 export function isWorkspaceId(value: string): boolean {
   return /^ws:[0-9a-f]{24}$/.test(value);
 }

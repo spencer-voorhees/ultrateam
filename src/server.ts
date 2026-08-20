@@ -17,7 +17,7 @@ import { normalizeAgentName } from './agents/registry.js';
 import { formatEntry, formatResume } from './format.js';
 import { VERSION } from './version.js';
 import { knownRoots } from './store/roots.js';
-import { rootsInWorkspace } from './workspace.js';
+import { durableWorkspaceRoot, rootsInWorkspace } from './workspace.js';
 import { createResumeState, resumableState } from './resume.js';
 
 const NUDGE =
@@ -60,7 +60,12 @@ const entryFields = {
 
 export async function startServer(cwd: string = process.cwd()): Promise<void> {
   const root = findProjectRoot(cwd) ?? cwd;
-  const project = path.basename(root);
+  // Entries persist in the workspace's durable home: a throwaway checkout
+  // (worktree/local clone made by an agent app) writes into the repository it
+  // came from, so its memory survives the checkout's deletion. Branch and git
+  // state still come from the actual checkout the agent worked in.
+  const storeRoot = durableWorkspaceRoot(root);
+  const project = path.basename(storeRoot);
   const index = new Index();
 
   function indexCurrentWorkspace(): void {
@@ -124,9 +129,9 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       tags: args.tags,
       resume: kind === 'note' ? null : createResumeState(root, args),
     });
-    appendEntry(root, entry);
+    appendEntry(storeRoot, entry);
     try {
-      index.upsert(entry, root);
+      index.upsert(entry, storeRoot);
     } catch (err) {
       // JSONL is the source of truth and the append succeeded — never fail
       // the tool call (and provoke a duplicate retry) over the derived index.
