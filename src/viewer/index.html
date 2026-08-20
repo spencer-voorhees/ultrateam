@@ -918,7 +918,10 @@ span.ws-folder-tint > svg {
   transform: rotate(-45deg) translateY(4px);
 }
 .ws-swatch.selected { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--swatch, var(--text-tertiary)); }
-.ws-popover-divider { height: 1px; background: var(--border); margin: 0.1rem 0; }
+/* The flex gap spaces the divider evenly above and below; the swatch row's
+   bottom margin mirrors the action button's top padding so both sides match. */
+.ws-popover-divider { height: 1px; background: var(--border); margin: 0; }
+.ws-swatches { margin-bottom: 4px; }
 .ws-popover-action {
   border: 0;
   background: none;
@@ -3160,6 +3163,10 @@ async function saveWorkspacePrefs(p, update) {
     if (update.hidden !== undefined) proj.hidden = update.hidden === true;
     if (proj !== p) { p.color = proj.color; p.hidden = proj.hidden; }
     render();
+    // Reconcile with the server: fetchState bumps the request sequence, which
+    // also drops any in-flight response from BEFORE this change — without it, a
+    // stale poll landing right after the optimistic render flips the UI back.
+    void fetchState();
   } catch (err) {
     showToast('Could not save workspace options: ' + err.message);
   }

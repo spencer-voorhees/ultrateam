@@ -162,14 +162,24 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
       rootsByWorkspace.set(id, workspaceRoots);
     }
     for (const project of projects) {
-      project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
+      const mergedRoots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])];
       // Represent the workspace by a durable root, never by whichever checkout
       // happened to write the latest entry — otherwise a throwaway worktree's
-      // random name ends up labeling the parent repo's whole workspace.
-      const durableRoots = project.roots.filter((r) => fs.existsSync(r) && cachedDurableRoot(r) === r);
-      if (durableRoots.length > 0 && !durableRoots.includes(project.path)) {
-        project.path = durableRoots[0];
-        project.name = path.basename(durableRoots[0]);
+      // random name ends up labeling the parent repo's whole workspace. The
+      // parent may never have been a registered root itself (all entries came
+      // from worktrees), so RESOLVE each checkout's durable home rather than
+      // only picking among the known roots.
+      const durableHomes = [...new Set(mergedRoots.filter((r) => fs.existsSync(r)).map((r) => cachedDurableRoot(r)))]
+        .filter((r) => fs.existsSync(r))
+        .sort();
+      project.roots = [...new Set([...mergedRoots, ...durableHomes])].sort();
+      if (durableHomes.length > 0) {
+        if (!durableHomes.includes(project.path)) project.path = durableHomes[0];
+        // The display name always follows the durable path. Entries recorded in
+        // throwaway checkouts carry their random folder name in the project
+        // field forever (files are truth), so latest-entry-wins naming would
+        // keep resurfacing it.
+        project.name = path.basename(project.path);
       }
     }
     // Presentation prefs overlay: per-workspace folder color + hidden flag.

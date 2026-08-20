@@ -146,7 +146,8 @@ test('viewer supports first launch before any workspace exists', async () => {
     registerRoot(project, path.join(home, '.ultrateam', 'projects.json'));
     const initializedState = await fetch(`${handle.url}/api/state`).then((r) => r.json());
     assert.equal(initializedState.projects.length, 1);
-    assert.equal(initializedState.projects[0].path, project);
+    // The representative path is canonicalized (macOS /var → /private/var).
+    assert.equal(initializedState.projects[0].path, fs.realpathSync.native(project));
     assert.equal(initializedState.projects[0].name, path.basename(project));
     assert.equal(initializedState.projects[0].count, 1);
 
