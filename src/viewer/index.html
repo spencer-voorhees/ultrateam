@@ -3171,6 +3171,22 @@ async function saveWorkspacePrefs(p, update) {
     if (update.color !== undefined) proj.color = update.color;
     if (update.hidden !== undefined) proj.hidden = update.hidden === true;
     if (proj !== p) { p.color = proj.color; p.hidden = proj.hidden; }
+    // Patch every cached snapshot too: workspace switches repaint instantly
+    // from sessionStorage, and a stale snapshot would flip this workspace back
+    // (visibly "jumping" in and out of the hidden section) on every switch
+    // until its server true-up landed.
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (!key || !key.startsWith('ut-state-cache:')) continue;
+        const snapshot = JSON.parse(sessionStorage.getItem(key));
+        const target = (snapshot.projects || []).find((x) => x.id === p.id);
+        if (!target) continue;
+        if (update.color !== undefined) target.color = update.color;
+        if (update.hidden !== undefined) target.hidden = update.hidden === true;
+        sessionStorage.setItem(key, JSON.stringify(snapshot));
+      }
+    } catch (e) {}
     render();
     // Reconcile with the server: fetchState bumps the request sequence, which
     // also drops any in-flight response from BEFORE this change — without it, a
