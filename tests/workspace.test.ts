@@ -37,6 +37,29 @@ test('independent clones with the same remote share a workspace id', () => {
   assert.deepEqual(rootsInWorkspace(rootA, [rootB]), [rootA, rootB].sort());
 });
 
+test('a local clone resolves through its path remote to the parent workspace', () => {
+  const parent = tempDir();
+  git(parent, ['init']);
+  git(parent, ['remote', 'add', 'origin', 'git@github.com:acme/widgets.git']);
+  git(parent, ['commit', '--allow-empty', '-m', 'x']);
+  // Agent apps clone the repo locally under a random name; origin is the
+  // parent's PATH, which must resolve through to the parent's own identity.
+  const cloneDir = path.join(tempDir(), 'wt-abc123');
+  execFileSync('git', ['clone', '-q', parent, cloneDir], { stdio: 'ignore' });
+
+  const clone = workspaceIdentity(cloneDir);
+  assert.equal(clone.id, workspaceIdentity(parent).id);
+  assert.equal(clone.source, 'remote');
+});
+
+test('a git worktree shares its parent repository workspace', () => {
+  const parent = tempDir();
+  git(parent, ['init']);
+  git(parent, ['commit', '--allow-empty', '-m', 'x']);
+  git(parent, ['worktree', 'add', '-q', path.join(parent, 'wt-random')]);
+  assert.equal(workspaceIdentity(path.join(parent, 'wt-random')).id, workspaceIdentity(parent).id);
+});
+
 test('unrelated local repositories stay separate unless explicitly linked', () => {
   const rootA = tempDir();
   const rootB = tempDir();

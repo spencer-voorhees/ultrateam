@@ -86,12 +86,17 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
     // resolve an arbitrary request path (that would become a path oracle).
     const candidateRoots = [...new Set([...knownRoots(), ...(startRoot ? [startRoot] : [])])];
     for (const root of candidateRoots) {
-      if (!isUltrateamInstallDirectory(root)) continue;
+      // Purge the install directory (never a workspace) and checkouts that no
+      // longer exist on disk — agent apps create throwaway worktrees/clones and
+      // delete them when done; their JSONL died with the folder, so keeping the
+      // index rows would show ghost workspaces forever. The index is disposable;
+      // a root that reappears is reindexed from its JSONL on the next visit.
+      if (!isUltrateamInstallDirectory(root) && fs.existsSync(root)) continue;
       index.removeProject(root);
       unregisterRoot(root);
       lastIndexed.delete(root);
     }
-    const roots = candidateRoots.filter((root) => !isUltrateamInstallDirectory(root));
+    const roots = candidateRoots.filter((root) => !isUltrateamInstallDirectory(root) && fs.existsSync(root));
     const rootAliases = new Map(roots.map((root) => [root, cachedWorkspaceId(root)]));
     const allowed = new Set<string>(index.projectSummaries().map((p) => p.id));
     for (const id of rootAliases.values()) allowed.add(id);

@@ -65,7 +65,7 @@ export function normalizeGitRemote(remote: string, root: string): string {
  * folder name. Remotes unify independent clones; the common Git directory
  * unifies worktrees; an absolute path is the conservative non-Git fallback.
  */
-export function workspaceIdentity(root: string): WorkspaceIdentity {
+export function workspaceIdentity(root: string, depth: number = 0): WorkspaceIdentity {
   const resolvedRoot = canonicalPath(root);
   const explicit = git(resolvedRoot, ['config', '--get', 'ultrateam.workspaceId']);
   if (explicit) return { id: stableId(`explicit:${explicit}`), source: 'explicit' };
@@ -75,7 +75,15 @@ export function workspaceIdentity(root: string): WorkspaceIdentity {
   if (remoteName) {
     const remote = git(resolvedRoot, ['remote', 'get-url', remoteName]);
     if (remote) {
-      return { id: stableId(`remote:${normalizeGitRemote(remote, resolvedRoot)}`), source: 'remote' };
+      const normalized = normalizeGitRemote(remote, resolvedRoot);
+      // A local-path remote means this checkout is a clone of another repo on
+      // this machine (agent apps make such copies with random names) — it is
+      // the SAME logical workspace as its parent, so resolve through to it.
+      if (normalized.startsWith('file:') && depth < 3) {
+        const target = normalized.slice('file:'.length);
+        if (fs.existsSync(target)) return workspaceIdentity(target, depth + 1);
+      }
+      return { id: stableId(`remote:${normalized}`), source: 'remote' };
     }
   }
 

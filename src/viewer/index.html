@@ -2726,7 +2726,16 @@ async function fetchState({ transition = false } = {}) {
       }
     } catch (e) {}
   }
-  if (transition && !servedInstant) renderSkeletonFeed();
+  if (transition && !servedInstant) {
+    // No cached data to paint, but the selection itself must not wait on the
+    // network — reflect the new scope in the left nav and top bar right away.
+    renderSkeletonFeed();
+    if (state.data) {
+      renderProjectNav(state.data);
+      const scoped = state.data.projects?.find((p) => p.id === state.scope);
+      if (scoped) $('#top-workspace').textContent = projectLabel(scoped);
+    }
+  }
 
   try {
     const res = await fetch('/api/state?' + params.toString());

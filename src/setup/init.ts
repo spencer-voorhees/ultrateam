@@ -9,6 +9,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { STORE_DIR, readEntries } from '../store/jsonl.js';
 import { Index } from '../store/db.js';
+import { workspaceIdentity } from '../workspace.js';
 
 const SERVER_COMMAND = { command: 'ultrateam', args: ['serve'] };
 
@@ -557,6 +558,12 @@ export function doctor(root: string | null): string[] {
     report.push('- project: no store here yet (one is created on first use)');
   } else {
     report.push(`✓ project root: ${root}`);
+    const identity = workspaceIdentity(root);
+    report.push(
+      identity.source === 'path'
+        ? `✗ workspace identity: ${identity.id} from the folder path only — git resolution failed here, so clones and worktrees of this repo will NOT merge into one workspace`
+        : `✓ workspace identity: ${identity.id} (via ${identity.source})`,
+    );
     const { entries, skipped } = readEntries(root);
     report.push(`✓ memory: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}${skipped > 0 ? ` (${skipped} corrupt line${skipped === 1 ? '' : 's'} skipped)` : ''}`);
   }
