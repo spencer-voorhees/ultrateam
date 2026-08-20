@@ -805,6 +805,14 @@ html.sidebar-resizing .nav-bar {
   display: inline-flex;
   flex: 0 0 auto;
 }
+/* Workspace names on cards/threads truncate cleanly; hover restores the full
+   name via a tooltip added only when actually cut off. */
+.ws-name-tip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Direct svg rules (e.g. .thread-workspace svg) outrank inherited color; this
    higher-specificity rule routes the icon back to the tint span's color. */
 span.ws-folder-tint > svg {
@@ -3272,7 +3280,7 @@ function renderThreadGroup(g, d) {
             ? `color: var(--ws-${workspaceColorFor(g.workspaceId, g.projectPath)});`
             : undefined,
         }, svgIcon('#icon-folder', 11, 11)),
-        h('span', {}, g.workspace)) : null,
+        h('span', { class: 'ws-name-tip' }, g.workspace)) : null,
       g.branch ? h('span', { class: 'thread-branch' }, svgIcon('#icon-branch', 12, 12), h('span', {}, g.branch)) : null
     ),
     h('span', { class: 'thread-relay' }, ...relayNodes),
@@ -3452,7 +3460,7 @@ function renderCard(entry, d) {
             ? `color: var(--ws-${workspaceColorFor(entry.workspaceId, entry.projectPath)});`
             : undefined,
         }, svgIcon('#icon-folder', 10, 10)),
-        h('span', {}, workspaceLabelFor(entry.workspaceId, entry.projectPath) || entry.project)
+        h('span', { class: 'ws-name-tip' }, workspaceLabelFor(entry.workspaceId, entry.projectPath) || entry.project)
       ) : null
     ) : null,
 
@@ -3974,6 +3982,16 @@ window.addEventListener('keydown', (ev) => {
       toggleCardPanel(id, 'details');
     }
   }
+});
+
+// Workspace names on cards and thread heads ellipsize in tight layouts; show
+// the full name on hover, but only when it's actually cut off — untruncated
+// names stay tooltip-quiet. Checked lazily on hover so it tracks resizes.
+document.addEventListener('mouseover', (ev) => {
+  const el = ev.target && ev.target.closest ? ev.target.closest('.ws-name-tip') : null;
+  if (!el) return;
+  if (el.scrollWidth > el.clientWidth) el.title = el.textContent;
+  else el.removeAttribute('title');
 });
 
 setInterval(() => {
