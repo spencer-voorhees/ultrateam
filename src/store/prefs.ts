@@ -19,6 +19,7 @@ export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];
 
 export interface WorkspacePrefs {
   color?: WorkspaceColor;
+  hidden?: boolean;
 }
 
 export function defaultPrefsPath(): string {
@@ -32,10 +33,13 @@ export function readAllPrefs(file: string = defaultPrefsPath()): Record<string, 
     const out: Record<string, WorkspacePrefs> = {};
     for (const [id, value] of Object.entries(parsed)) {
       if (typeof value !== 'object' || value === null) continue;
-      const { color } = value as Record<string, unknown>;
+      const { color, hidden } = value as Record<string, unknown>;
+      const prefs: WorkspacePrefs = {};
       if (typeof color === 'string' && (WORKSPACE_COLORS as readonly string[]).includes(color)) {
-        out[id] = { color: color as WorkspaceColor };
+        prefs.color = color as WorkspaceColor;
       }
+      if (hidden === true) prefs.hidden = true;
+      if (prefs.color !== undefined || prefs.hidden !== undefined) out[id] = prefs;
     }
     return out;
   } catch {
@@ -44,13 +48,13 @@ export function readAllPrefs(file: string = defaultPrefsPath()): Record<string, 
 }
 
 /**
- * Set or clear one workspace's folder color and persist. `color: null` clears
- * the override; a workspace with nothing left is dropped from the file.
- * Returns the updated map, or null when the update is invalid.
+ * Merge one workspace's prefs (folder color, hidden) and persist. A null field
+ * clears that override; a workspace with nothing left is dropped from the
+ * file. Returns the updated map, or null when the update is invalid.
  */
 export function updatePrefs(
   id: string,
-  update: { color?: string | null },
+  update: { color?: string | null; hidden?: boolean | null },
   file: string = defaultPrefsPath(),
 ): Record<string, WorkspacePrefs> | null {
   if (typeof id !== 'string' || id.trim() === '' || id.length > 200) return null;
@@ -66,8 +70,13 @@ export function updatePrefs(
       return null;
     }
   }
+  if (update.hidden !== undefined) {
+    if (update.hidden === true) prefs.hidden = true;
+    else if (update.hidden === false || update.hidden === null) delete prefs.hidden;
+    else return null;
+  }
 
-  if (prefs.color === undefined) delete all[id];
+  if (prefs.color === undefined && prefs.hidden === undefined) delete all[id];
   else all[id] = prefs;
 
   // Atomic write so a crash never truncates the prefs file.

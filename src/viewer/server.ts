@@ -163,11 +163,20 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
     }
     for (const project of projects) {
       project.roots = [...new Set([...project.roots, ...(rootsByWorkspace.get(project.id) ?? [])])].sort();
+      // Represent the workspace by a durable root, never by whichever checkout
+      // happened to write the latest entry — otherwise a throwaway worktree's
+      // random name ends up labeling the parent repo's whole workspace.
+      const durableRoots = project.roots.filter((r) => fs.existsSync(r) && cachedDurableRoot(r) === r);
+      if (durableRoots.length > 0 && !durableRoots.includes(project.path)) {
+        project.path = durableRoots[0];
+        project.name = path.basename(durableRoots[0]);
+      }
     }
-    // Presentation prefs overlay: per-workspace folder color.
+    // Presentation prefs overlay: per-workspace folder color + hidden flag.
     const prefs = readAllPrefs();
-    for (const project of projects as Array<(typeof projects)[number] & { color: string | null }>) {
+    for (const project of projects as Array<(typeof projects)[number] & { color: string | null; hidden: boolean }>) {
       project.color = prefs[project.id]?.color ?? null;
+      project.hidden = prefs[project.id]?.hidden === true;
     }
     projects.sort((a, b) => b.lastTs.localeCompare(a.lastTs) || a.name.localeCompare(b.name));
     if (scope && !projects.some((p) => p.id === scope)) {
@@ -261,8 +270,16 @@ function handlePrefsUpdate(req: http.IncomingMessage, res: http.ServerResponse):
         json(res, 400, { error: 'id is required' });
         return;
       }
-      const update: { color?: string | null } = {};
+      const update: { color?: string | null; hidden?: boolean | null } = {};
       if ('color' in parsed) update.color = parsed.color === null ? null : String(parsed.color);
+      if ('hidden' in parsed) {
+        const h = (parsed as { hidden?: unknown }).hidden;
+        if (h !== true && h !== false && h !== null) {
+          json(res, 400, { error: 'hidden must be true, false, or null' });
+          return;
+        }
+        update.hidden = h;
+      }
       const all = updatePrefs(parsed.id, update);
       if (!all) {
         json(res, 400, { error: `invalid update; colors are ${WORKSPACE_COLORS.join(', ')}` });

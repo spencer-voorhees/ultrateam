@@ -918,6 +918,40 @@ span.ws-folder-tint > svg {
   transform: rotate(-45deg) translateY(4px);
 }
 .ws-swatch.selected { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--swatch, var(--text-tertiary)); }
+.ws-popover-divider { height: 1px; background: var(--border); margin: 0.1rem 0; }
+.ws-popover-action {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.ws-popover-action:hover { background: var(--surface-hover); color: var(--text-primary); }
+/* Hidden workspaces render dimmed inside the expanded hidden section. */
+.nav-item-row.is-hidden-ws { opacity: 0.55; }
+.nav-hidden-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 5px 10px;
+  margin-top: 2px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 8px;
+}
+.nav-hidden-toggle:hover { color: var(--text-primary); background: var(--surface-hover); }
+.nav-hidden-caret { display: inline-flex; transform: rotate(-90deg); transition: transform 0.16s ease; }
+.nav-hidden-toggle.open .nav-hidden-caret { transform: rotate(0deg); }
 .nav-count-pill {
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
@@ -2819,6 +2853,7 @@ function render({ animateStats = false } = {}) {
   state.workspaceColorByPath = buildWorkspaceColorIndex(d);
   state.workspaceLabelById = new Map((d.projects || []).map((p) => [p.id, projectLabel(p)]));
   state.workspaceColorById = new Map((d.projects || []).filter((p) => p.color).map((p) => [p.id, p.color]));
+  state.hiddenWorkspaceIds = new Set((d.projects || []).filter((p) => p.hidden).map((p) => p.id));
   renderOverview(d, { animateStats });
   renderRoster(d);
   renderProjectNav(d);
@@ -2958,19 +2993,21 @@ function renderProjectNav(d) {
     setChildren(list, h('div', { class: 'nav-empty-state' }, 'No workspaces yet'));
     return;
   }
-  // "All" shows the total across every workspace (stable), not the current
-  // scope's count — otherwise it changed every time you switched workspaces.
-  const totalAcrossWorkspaces = d.projects.reduce((n, p) => n + (p.count || 0), 0);
+  const visible = d.projects.filter((p) => !p.hidden);
+  const hiddenProjects = d.projects.filter((p) => p.hidden);
+  // "All" shows the total across every visible workspace (stable), not the
+  // current scope's count — otherwise it changed every time you switched.
+  const totalAcrossWorkspaces = visible.reduce((n, p) => n + (p.count || 0), 0);
   // Keep the left nav in a fixed alphabetical order — the server orders by most
   // recent activity, which makes workspaces jump around as you work.
-  const sortedProjects = [...d.projects].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   const items = [
     { id: 'all', name: 'All', count: totalAcrossWorkspaces },
-    ...sortedProjects,
+    ...[...visible].sort(byName),
+    ...(state.showHidden ? [...hiddenProjects].sort(byName) : []),
   ];
 
-  setChildren(list, items.map((p) => {
+  const rows = items.map((p) => {
     const isActive = (state.scope === p.id) || (p.id === 'all' && state.scope === 'all');
     // Every workspace's path is a hover away, but only over the icon + name —
     // a title on the whole row would pop tooltips while merely scanning the list.
@@ -3000,12 +3037,38 @@ function renderProjectNav(d) {
       'aria-label': `Options for ${p.name}`,
       onclick: (e) => { e.stopPropagation(); openWorkspacePopover(p, e.currentTarget); },
     }, '⋯');
-    return h('div', { class: 'nav-item-row' }, btn, menu);
-  }));
+    return h('div', { class: `nav-item-row${p.hidden ? ' is-hidden-ws' : ''}` }, btn, menu);
+  });
+
+  // Hidden workspaces live behind a quiet toggle at the bottom of the section —
+  // that's also the way back: expand, open a hidden row's ⋯, Unhide.
+  if (hiddenProjects.length > 0) {
+    rows.push(h('button', {
+      class: `nav-hidden-toggle${state.showHidden ? ' open' : ''}`,
+      onclick: () => { state.showHidden = !state.showHidden; renderProjectNav(state.data); },
+    },
+      h('span', { class: 'nav-hidden-caret' }, svgIcon('#icon-chevron', 11, 11)),
+      h('span', {}, `Hidden (${hiddenProjects.length})`)
+    ));
+    if (state.showHidden) {
+      // Move the toggle above the hidden rows it reveals.
+      const toggle = rows.pop();
+      const visibleCount = 1 + visible.length; // "All" + visible workspaces
+      rows.splice(visibleCount, 0, toggle);
+    }
+  }
+
+  setChildren(list, rows);
 }
 
 function renderFeed(d, { animateStats = false } = {}) {
   let entries = d.entries || [];
+  // Hidden workspaces stay out of the combined view; scoping to one directly
+  // (via search or an old link) still shows it — hiding is decluttering, not
+  // deletion.
+  if (d.scope === 'all' && state.hiddenWorkspaceIds && state.hiddenWorkspaceIds.size > 0) {
+    entries = entries.filter((e) => !state.hiddenWorkspaceIds.has(e.workspaceId));
+  }
 
   const totalHandoffs = entries.filter((e) => e.kind === 'handoff').length;
   const totalSessions = entries.filter((e) => e.kind === 'session').length;
@@ -3094,7 +3157,8 @@ async function saveWorkspacePrefs(p, update) {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     const proj = ((state.data && state.data.projects) || []).find((x) => x.id === p.id) || p;
     if (update.color !== undefined) proj.color = update.color;
-    if (proj !== p) p.color = proj.color;
+    if (update.hidden !== undefined) proj.hidden = update.hidden === true;
+    if (proj !== p) { p.color = proj.color; p.hidden = proj.hidden; }
     render();
   } catch (err) {
     showToast('Could not save workspace options: ' + err.message);
@@ -3117,9 +3181,23 @@ function openWorkspacePopover(p, anchor) {
       },
     })
   ));
-  wsPopover = h('div', { class: 'ws-popover', role: 'dialog', 'aria-label': `Folder color for ${p.name}` },
+  const hideBtn = h('button', {
+    class: 'ws-popover-action',
+    onclick: () => {
+      const hiding = !p.hidden;
+      void saveWorkspacePrefs(p, { hidden: hiding ? true : null });
+      if (hiding && state.scope === p.id) {
+        state.scope = 'all';
+        fetchState({ transition: true });
+      }
+      closeWorkspacePopover();
+    },
+  }, p.hidden ? 'Unhide workspace' : 'Hide workspace');
+  wsPopover = h('div', { class: 'ws-popover', role: 'dialog', 'aria-label': `Options for ${p.name}` },
     h('div', { class: 'ws-popover-label' }, 'Folder color'),
-    swatches
+    swatches,
+    h('div', { class: 'ws-popover-divider' }),
+    hideBtn
   );
   document.body.appendChild(wsPopover);
   const r = anchor.getBoundingClientRect();
