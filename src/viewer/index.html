@@ -1250,6 +1250,34 @@ span.ws-folder-tint > svg {
   flex: 0 0 auto;
 }
 .thread-chevron { display: inline-flex; transition: transform 0.16s ease; flex: 0 0 auto; }
+/* Subagent hierarchy: entries written by subagents indent one level under the
+   parent session, with an elbow connector off the avatar rail. */
+.thread-msg-sub { margin-left: 34px; position: relative; }
+.thread-msg-sub::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: -6px;
+  width: 16px;
+  height: 22px;
+  border-left: 1.5px solid var(--border);
+  border-bottom: 1.5px solid var(--border);
+  border-bottom-left-radius: 10px;
+}
+.thread-msg-subtag,
+.subagent-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.thread-sub-count { display: inline-flex; align-items: center; gap: 4px; }
+.thread-sub-count svg { color: var(--text-tertiary); }
+
 .thread-group.collapsed .thread-chevron { transform: rotate(-90deg); }
 .thread-body { padding: 0.35rem 0.85rem 0.6rem; display: flex; flex-direction: column; }
 .thread-group.collapsed .thread-body { display: none; }
@@ -2152,6 +2180,12 @@ span.ws-folder-tint > svg {
       <path fill="currentColor" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
     </symbol>
     <!-- Git Branch Icon (Lucide git-branch) -->
+    <symbol id="icon-subagent" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 4v8a4 4 0 0 0 4 4h8"/>
+        <path d="m14 12 4 4-4 4"/>
+      </g>
+    </symbol>
     <symbol id="icon-worktree" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M16 3h5v5"/>
@@ -3413,6 +3447,7 @@ function renderThreadGroup(g, d) {
     relayNodes.push(h('span', { class: 'agent-icon-badge', style: `--p-color:${meta.color};`, title: getAgentDisplayName(agent && agent.name, agent && agent.display, meta) }, svgIcon(meta.icon, 12, 12)));
   });
   const handoffs = g.entries.filter((e) => e.kind === 'handoff').length;
+  const subCount = g.entries.filter((e) => e.subagent).length;
   const head = h('button', { class: 'thread-head', type: 'button', onclick: () => toggleThread(g.key) },
     h('span', { class: 'thread-chevron' }, svgIcon('#icon-chevron', 14, 14)),
     h('span', { class: 'thread-head-labels' },
@@ -3430,6 +3465,8 @@ function renderThreadGroup(g, d) {
     h('span', { class: 'thread-meta' },
       isFresh ? h('span', { class: 'thread-new-badge' }, 'New') : null,
       handoffs > 0 ? h('span', {}, `${handoffs} handoff${handoffs === 1 ? '' : 's'}`) : null,
+      subCount > 0 ? h('span', { class: 'thread-sub-count', title: 'entries written by subagents inside this thread' },
+        svgIcon('#icon-subagent', 10, 10), h('span', {}, `${subCount} subagent entr${subCount === 1 ? 'y' : 'ies'}`)) : null,
       h('span', {}, `${g.entries.length} entr${g.entries.length === 1 ? 'y' : 'ies'}`),
       h('span', {}, timeAgo(g.lastTs))
     )
@@ -3442,8 +3479,10 @@ function renderThreadGroup(g, d) {
   let prevKey = null;
   const rows = g.entries.map((e) => {
     const k = agentKey(e.agent && e.agent.name);
-    const passed = prevKey && k && k !== prevKey;
-    prevKey = k || prevKey;
+    // Subagent entries neither take nor pass the baton: the thread's authorship
+    // stays with the parent session they worked under.
+    const passed = !e.subagent && prevKey && k && k !== prevKey;
+    if (!e.subagent) prevKey = k || prevKey;
     return { e, passed };
   });
   rows.reverse();
@@ -3459,7 +3498,7 @@ function renderThreadGroup(g, d) {
     // Only the true oldest (shown when fully expanded) ends the rail; while
     // collapsed, the last visible row keeps its line down to the expander.
     const isLast = showAll && idx === visible.length - 1;
-    return h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${isLast ? ' thread-msg-last' : ''}` },
+    return h('div', { class: `thread-msg${passed ? ' thread-msg-pass' : ''}${isLast ? ' thread-msg-last' : ''}${e.subagent ? ' thread-msg-sub' : ''}` },
       h('div', { class: 'thread-msg-rail' },
         h('span', { class: 'thread-msg-avatar agent-icon-badge', style: `--p-color:${meta.color};`, title: name }, svgIcon(meta.icon, 13, 13)),
         h('span', { class: 'thread-msg-line' })
@@ -3467,6 +3506,8 @@ function renderThreadGroup(g, d) {
       h('div', { class: 'thread-msg-content' },
         h('button', { class: 'thread-msg-author', type: 'button', onclick: () => toggleThreadEntry(e.id) },
           h('span', { class: 'thread-msg-name' }, name),
+          e.subagent ? h('span', { class: 'thread-msg-subtag', title: `subagent working under ${e.subagent.parent}` },
+            svgIcon('#icon-subagent', 10, 10), h('span', {}, 'subagent')) : null,
           passed ? h('span', { class: 'thread-msg-pass-tag' }, 'picked up the thread') : null,
           h('span', { class: 'thread-msg-time' }, timeAgo(e.ts)),
           h('span', { class: `thread-msg-toggle ${expanded ? 'is-open' : ''}` }, svgIcon('#icon-chevron', 12, 12))
@@ -3591,7 +3632,7 @@ function renderCard(entry, d) {
       }, entry.title)
     ),
     h('p', { class: 'card-summary' }, entry.summary),
-    (entry.branch || entry.origin || (d.scope === 'all' && entry.project)) ? h('div', { class: 'card-context-row' },
+    (entry.branch || entry.origin || entry.subagent || (d.scope === 'all' && entry.project)) ? h('div', { class: 'card-context-row' },
       entry.branch ? h('span', { class: 'card-context-item' },
         svgIcon('#icon-branch', 10, 10),
         h('span', {}, entry.branch)
@@ -3602,6 +3643,10 @@ function renderCard(entry, d) {
         class: 'card-context-item ws-origin-mark',
         title: `written from ${entry.origin.kind} ${entry.origin.name} · ${entry.origin.path}`,
       }, svgIcon('#icon-worktree', 10, 10)) : null,
+      entry.subagent ? h('span', {
+        class: 'card-context-item subagent-mark',
+        title: `written by a subagent working under ${entry.subagent.parent}`,
+      }, svgIcon('#icon-subagent', 10, 10), h('span', {}, 'subagent')) : null,
       d.scope === 'all' && entry.project ? h('span', { class: 'card-context-item' },
         h('span', {
           class: 'ws-folder-tint',
@@ -3776,6 +3821,7 @@ function formatEntryText(entry) {
   add('Open threads recorded at handoff', entry.open_threads);
   add('Tags', entry.tags);
   if (entry.origin) lines.push('', `Written from ${entry.origin.kind}: ${entry.origin.name} (${entry.origin.path})`);
+  if (entry.subagent) lines.push('', `Written by a subagent working under ${entry.subagent.parent}`);
   return lines.join('\n');
 }
 

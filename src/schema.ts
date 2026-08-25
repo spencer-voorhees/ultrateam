@@ -38,11 +38,19 @@ export const EntryOriginSchema = z.object({
   path: z.string().min(1),
 });
 
+/** Provenance for entries written by a subagent working under a parent agent.
+ * Self-declared via the checkpoint/handoff tools: subagents share the parent's
+ * MCP connection, so the server cannot detect them — absent means top-level. */
+export const SubagentInfoSchema = z.object({
+  parent: z.string().min(1),
+});
+
 export const EntrySchema = z.object({
   id: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, 'must be a ULID'),
   ts: z.string().datetime(),
   project: z.string().min(1),
   origin: EntryOriginSchema.nullable().default(null),
+  subagent: SubagentInfoSchema.nullable().default(null),
   branch: z.string().nullable().default(null),
   agent: AgentInfoSchema,
   kind: EntryKindSchema.default('session'),
@@ -61,6 +69,7 @@ export type EntryKind = z.infer<typeof EntryKindSchema>;
 export type GitState = z.infer<typeof GitStateSchema>;
 export type ResumeState = z.infer<typeof ResumeStateSchema>;
 export type EntryOrigin = z.infer<typeof EntryOriginSchema>;
+export type SubagentInfo = z.infer<typeof SubagentInfoSchema>;
 
 export type NewEntryInput = Omit<z.input<typeof EntrySchema>, 'id' | 'ts'>;
 

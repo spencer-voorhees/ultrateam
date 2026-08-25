@@ -31,7 +31,9 @@ const SERVER_INSTRUCTIONS =
   '(or resume) to load prior context from any agent. Call checkpoint after each meaningful step and ' +
   'handoff before the session ends so other agents can continue. When calling checkpoint or handoff, ' +
   'always pass the model argument with the exact model id you are running as (e.g. "claude-sonnet-4-6", ' +
-  '"gpt-5.6") so entries are attributed to the right model.';
+  '"gpt-5.6") so entries are attributed to the right model. If you are a subagent (a task or agent ' +
+  'spawned by another agent), also pass subagent: true and parent_agent with the spawning agent\'s name ' +
+  'so your work nests under the parent session.';
 
 const entryFields = {
   title: z.string().min(1).max(200).describe('Short, specific title for this entry'),
@@ -50,6 +52,14 @@ const entryFields = {
     .optional()
     .describe('Override the auto-detected agent name (e.g. "claude-code", "cursor")'),
   model: z.string().optional().describe('Always set this to the model id you are running as, e.g. "claude-sonnet-4-6" or "gpt-5.6", so entries are attributed to the right model'),
+  subagent: z
+    .boolean()
+    .optional()
+    .describe('Set true when you are a subagent — a task/agent spawned by another agent — so this entry nests under the parent session in the timeline'),
+  parent_agent: z
+    .string()
+    .optional()
+    .describe('When subagent is true: the name of the agent that spawned you, e.g. "claude-code"'),
   objective: z.string().optional().describe('The active user goal, stated independently of any agent'),
   completed: z.array(z.string()).default([]).describe('Concrete work completed so far'),
   next_steps: z.array(z.string()).default([]).describe('Ordered actions the next agent should take'),
@@ -119,6 +129,8 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       open_threads: string[];
       agent_name?: string;
       model?: string;
+      subagent?: boolean;
+      parent_agent?: string;
       objective?: string;
       completed: string[];
       next_steps: string[];
@@ -132,6 +144,9 @@ export async function startServer(cwd: string = process.cwd()): Promise<void> {
       origin,
       branch: currentBranch(root),
       agent: callerAgent(args.agent_name, args.model),
+      subagent: args.subagent
+        ? { parent: args.parent_agent ?? callerAgent(args.agent_name, args.model).name }
+        : null,
       kind,
       title: args.title,
       summary: args.summary,

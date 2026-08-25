@@ -15,7 +15,7 @@ import { isWorkspaceId, workspaceIdentity } from '../workspace.js';
 
 // Bump when the table shape changes: a mismatched index is dropped and
 // rebuilt rather than migrated — it holds nothing original.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export function defaultIndexPath(): string {
   return path.join(os.homedir(), '.ultrateam', 'index.db');
@@ -95,6 +95,7 @@ interface EntryRow {
   tags: string;
   resume: string | null;
   origin: string | null;
+  subagent: string | null;
   rank?: number;
 }
 
@@ -197,6 +198,7 @@ function rowToEntry(row: EntryRow): Entry {
     tags: JSON.parse(row.tags),
     resume: row.resume ? JSON.parse(row.resume) : null,
     origin: row.origin ? JSON.parse(row.origin) : null,
+    subagent: row.subagent ? JSON.parse(row.subagent) : null,
   });
 }
 
@@ -242,6 +244,7 @@ export class Index {
         tags TEXT NOT NULL,
         resume TEXT,
         origin TEXT,
+        subagent TEXT,
         PRIMARY KEY (id, project_path)
       );
       CREATE INDEX IF NOT EXISTS idx_entries_ts ON entries(ts);
@@ -284,8 +287,8 @@ export class Index {
       .prepare(
         `INSERT OR REPLACE INTO entries
          (id, ts, project, project_path, workspace_id, branch, agent_name, agent_model, provider,
-          kind, title, summary, files, decisions, open_threads, tags, resume, origin)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          kind, title, summary, files, decisions, open_threads, tags, resume, origin, subagent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         entry.id,
@@ -306,6 +309,7 @@ export class Index {
         JSON.stringify(entry.tags),
         entry.resume ? JSON.stringify(entry.resume) : null,
         entry.origin ? JSON.stringify(entry.origin) : null,
+        entry.subagent ? JSON.stringify(entry.subagent) : null,
       );
     if (this.hasFts) {
       this.db
