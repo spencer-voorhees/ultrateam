@@ -162,12 +162,50 @@ export async function waitForViewer(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const state = readViewerState(file);
-    if (state?.instanceId === instanceId && (await viewerHealth(state))) {
+    // Success is "a healthy viewer exists", not "MY child won". Two `view`
+    // invocations can race (the app auto-start plus a manual run); both
+    // children bind — one on the requested port, one on the fallback — and
+    // both write this single state file. Whoever loses the write must adopt
+    // the winner instead of reporting a failure while a perfectly good
+    // viewer is running.
+    if (state && (await viewerHealth(state))) {
       return state;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return null;
+}
+
+/**
+ * Best-effort serialization of concurrent starts: the first invocation claims
+ * the lock and spawns; racers see a fresh lock and just wait for the winner's
+ * viewer instead of spawning a second child. Stale locks (crashed starter)
+ * expire quickly.
+ */
+export function claimStartLock(file: string = defaultViewerStatePath()): boolean {
+  const lock = `${file}.start-lock`;
+  try {
+    const stat = fs.statSync(lock);
+    if (Date.now() - stat.mtimeMs < 10_000) return false;
+    fs.unlinkSync(lock);
+  } catch {
+    // No lock (or unreadable/stale) — try to claim it.
+  }
+  try {
+    fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function releaseStartLock(file: string = defaultViewerStatePath()): void {
+  try {
+    fs.unlinkSync(`${file}.start-lock`);
+  } catch {
+    // Already gone.
+  }
 }
 
 export async function stopViewer(

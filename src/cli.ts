@@ -12,7 +12,9 @@ import { initGlobal, removeGlobalRegistrations, doctor } from './setup/init.js';
 import { startServer } from './server.js';
 import { startViewer } from './viewer/server.js';
 import {
+  claimStartLock,
   defaultViewerLogPath,
+  releaseStartLock,
   removeViewerState,
   runningViewer,
   stopViewer,
@@ -168,29 +170,51 @@ program
         return;
       }
 
+      // Two invocations can race here (the app auto-start plus a manual run).
+      // Only one gets to spawn; the other waits for whichever viewer comes up.
+      if (!claimStartLock()) {
+        const winner = await waitForViewer('');
+        if (winner) {
+          console.log(`Reusing ultrateam viewer at ${winner.url} (PID ${winner.pid}).`);
+          if (opts.open) openBrowser(winner.url);
+          return;
+        }
+        // The concurrent starter died without a viewer; fall through and start.
+      }
+
       const instanceId = randomUUID();
       const cliPath = fileURLToPath(import.meta.url);
       const runtimeArgs = path.extname(cliPath) === '.ts' ? process.execArgv : [];
       const logFile = defaultViewerLogPath();
       fs.mkdirSync(path.dirname(logFile), { recursive: true });
+      // Remember where the log ends now: a failure report must show only what
+      // THIS attempt wrote, not "viewer at …" lines from past successful runs.
+      let logOffset = 0;
+      try { logOffset = fs.statSync(logFile).size; } catch {}
       const outFd = fs.openSync(logFile, 'a');
-      const child = spawn(
-        process.execPath,
-        [...runtimeArgs, cliPath, 'view', '--foreground', '--no-open', '--port', String(opts.port)],
-        {
-          cwd: process.cwd(),
-          detached: true,
-          env: {
-            ...process.env,
-            ULTRATEAM_VIEWER_INSTANCE_ID: instanceId,
-            ULTRATEAM_VIEWER_MODE: 'background',
+      let state: ViewerState | null = null;
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = spawn(
+          process.execPath,
+          [...runtimeArgs, cliPath, 'view', '--foreground', '--no-open', '--port', String(opts.port)],
+          {
+            cwd: process.cwd(),
+            detached: true,
+            env: {
+              ...process.env,
+              ULTRATEAM_VIEWER_INSTANCE_ID: instanceId,
+              ULTRATEAM_VIEWER_MODE: 'background',
+            },
+            stdio: ['ignore', outFd, outFd],
+            windowsHide: true,
           },
-          stdio: ['ignore', outFd, outFd],
-          windowsHide: true,
-        },
-      );
-      fs.closeSync(outFd);
-      const state = await waitForViewer(instanceId);
+        );
+        fs.closeSync(outFd);
+        state = await waitForViewer(instanceId);
+      } finally {
+        releaseStartLock();
+      }
       if (!state) {
         if (child.pid && child.exitCode === null) {
           try {
@@ -202,13 +226,21 @@ program
         let detail = '';
         try {
           if (fs.existsSync(logFile)) {
-            const lines = fs.readFileSync(logFile, 'utf8').trim().split(/\r?\n/).slice(-10);
-            if (lines.length > 0 && lines.some((l) => l.trim().length > 0)) {
-              detail = `:\n${lines.join('\n')}`;
-            }
+            const appended = fs.readFileSync(logFile, 'utf8').slice(logOffset).trim();
+            const lines = appended.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(-10);
+            if (lines.length > 0) detail = `:\n${lines.join('\n')}`;
           }
         } catch {}
         throw new Error(`The ultrateam viewer did not start on port ${opts.port}${detail}`);
+      }
+      if (state.instanceId !== instanceId) {
+        // Another invocation's viewer won the state file; ours is redundant.
+        if (child.pid && child.pid !== state.pid && child.exitCode === null) {
+          try { process.kill(child.pid, 'SIGTERM'); } catch {}
+        }
+        console.log(`Reusing ultrateam viewer at ${state.url} (PID ${state.pid}).`);
+        if (opts.open) openBrowser(state.url);
+        return;
       }
       child.unref();
       console.log(`Started ultrateam viewer in the background at ${state.url} (PID ${state.pid}).`);
