@@ -3,6 +3,7 @@
 
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Index, type ScoredEntry } from '../store/db.js';
@@ -70,11 +71,59 @@ const identityCache = new Map<string, string>();
 // Durable-home resolution spawns git subprocesses — cache per process lifetime,
 // same rationale as identityCache (a per-request recompute was the perf trap).
 const durableCache = new Map<string, string>();
+
+// Both caches also persist across viewer restarts. The app launches a fresh
+// viewer process, so without a disk cache EVERY app start paid the git-spawn
+// cost again for every known root before the first byte of state — with a few
+// dozen roots that is seconds of blank initial load for values that never
+// change.
+const WORKSPACE_CACHE_PATH = path.join(os.homedir(), '.ultrateam', 'workspace-cache.json');
+let cacheDirty = false;
+function loadWorkspaceCache(): void {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(WORKSPACE_CACHE_PATH, 'utf8')) as {
+      version?: number;
+      roots?: Record<string, { id?: string; durable?: string }>;
+    };
+    if (parsed?.version !== 1 || !parsed.roots) return;
+    for (const [root, v] of Object.entries(parsed.roots)) {
+      // A cache entry for a vanished checkout is dead weight; skip it so the
+      // file self-compacts on the next save.
+      if (!fs.existsSync(root)) continue;
+      if (typeof v.id === 'string') identityCache.set(root, v.id);
+      if (typeof v.durable === 'string' && fs.existsSync(v.durable)) durableCache.set(root, v.durable);
+    }
+  } catch {
+    // Absent or corrupt cache just means a cold computation.
+  }
+}
+function saveWorkspaceCache(): void {
+  if (!cacheDirty) return;
+  cacheDirty = false;
+  try {
+    const roots: Record<string, { id?: string; durable?: string }> = {};
+    for (const [root, id] of identityCache) roots[root] = { ...roots[root], id };
+    for (const [root, durable] of durableCache) roots[root] = { ...roots[root], durable };
+    fs.mkdirSync(path.dirname(WORKSPACE_CACHE_PATH), { recursive: true });
+    fs.writeFileSync(WORKSPACE_CACHE_PATH, JSON.stringify({ version: 1, roots }, null, 2) + '\n', 'utf8');
+  } catch {
+    // Best-effort persistence; the in-memory cache still works.
+  }
+}
+let savePending: NodeJS.Timeout | null = null;
+function scheduleCacheSave(): void {
+  cacheDirty = true;
+  if (savePending) return;
+  savePending = setTimeout(() => { savePending = null; saveWorkspaceCache(); }, 500);
+  savePending.unref?.();
+}
+
 function cachedDurableRoot(root: string): string {
   let durable = durableCache.get(root);
   if (durable === undefined) {
     durable = durableWorkspaceRoot(root);
     durableCache.set(root, durable);
+    scheduleCacheSave();
   }
   return durable;
 }
@@ -83,6 +132,7 @@ function cachedWorkspaceId(root: string): string {
   if (id === undefined) {
     id = workspaceIdentity(root).id;
     identityCache.set(root, id);
+    scheduleCacheSave();
   }
   return id;
 }
@@ -130,25 +180,34 @@ function handleState(index: Index, url: URL, startRoot: string | null, res: http
     // when viewing all workspaces) from JSONL truth, so separate clones contribute
     // to one logical history.
     const now = Date.now();
-    for (const root of roots) {
-      if (scope && rootAliases.get(root) !== scope) continue;
-      if (!fs.existsSync(root)) continue;
-      if (now - (lastIndexed.get(root) ?? 0) <= REINDEX_INTERVAL_MS) continue;
-      lastIndexed.set(root, now);
-      try {
-        // A throwaway checkout (worktree/local clone) with a leftover store
-        // folds into its durable home before indexing, so the memory survives
-        // the checkout's eventual deletion. One-shot: the source store is gone
-        // after a clean migration.
-        const durable = cachedDurableRoot(root);
-        if (durable !== root && migrateStoreTo(root, durable) > 0) {
-          index.indexProject(durable);
+    const healTargets = roots.filter((root) =>
+      (!scope || rootAliases.get(root) === scope)
+      && fs.existsSync(root)
+      && now - (lastIndexed.get(root) ?? 0) > REINDEX_INTERVAL_MS);
+    for (const root of healTargets) lastIndexed.set(root, now);
+    const heal = (): void => {
+      for (const root of healTargets) {
+        try {
+          // A throwaway checkout (worktree/local clone) with a leftover store
+          // folds into its durable home before indexing, so the memory survives
+          // the checkout's eventual deletion. One-shot: the source store is gone
+          // after a clean migration.
+          const durable = cachedDurableRoot(root);
+          if (durable !== root && migrateStoreTo(root, durable) > 0) {
+            index.indexProject(durable);
+          }
+          index.indexProject(root);
+        } catch {
+          // serve whatever the index already has
         }
-        index.indexProject(root);
-      } catch {
-        // serve whatever the index already has
       }
-    }
+    };
+    // Only a first-ever run (empty index) must heal before responding — the
+    // page would otherwise render an empty workspace list. Every other load
+    // serves the existing index instantly; the heal runs right after the
+    // response and its result lands with the client's next poll.
+    if (index.projectSummaries().length === 0) heal();
+    else setImmediate(heal);
 
     const projects = index.projectSummaries();
     // A workspace only exists once it holds real memory (an entry). Merge any
@@ -317,6 +376,7 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
   // of connection/FTS setup to every /api/state call, which made the whole UI
   // (initial load and every workspace switch) feel slow.
   const index = new Index();
+  loadWorkspaceCache();
 
   const server = http.createServer((req, res) => {
     try {
@@ -397,7 +457,18 @@ export function startViewer(opts: ViewerOptions = {}): Promise<ViewerHandle> {
         resolve({
           url: `http://127.0.0.1:${boundPort}`,
           port: boundPort,
-          close: () => { server.close(); index.close(); },
+          close: () => { server.close(); saveWorkspaceCache(); index.close(); },
+        });
+        // Warm everything the first /api/state needs in the background: any
+        // identity/durable value the disk cache missed (each costs git spawns)
+        // and a first reindex pass. On a typical app launch this finishes
+        // before the page's first request; either way no request blocks on it.
+        setImmediate(() => {
+          for (const root of knownRoots()) {
+            if (isUltrateamInstallDirectory(root) || !fs.existsSync(root)) continue;
+            try { cachedWorkspaceId(root); cachedDurableRoot(root); } catch { /* cold value stays cold */ }
+          }
+          try { reindexKnownRoots(index); } catch { /* index stays as-is */ }
         });
       });
     };
