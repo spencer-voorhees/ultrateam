@@ -154,6 +154,57 @@ export async function runningViewer(
   return null;
 }
 
+/**
+ * Probe a port directly for a healthy ultrateam viewer, independent of the
+ * state file. A viewer can outlive its viewer.json (crashed starter, state
+ * clobbered by a racing instance); its health endpoint still identifies it,
+ * so the CLI can re-adopt the orphan instead of starting a shadow instance
+ * on a fallback port.
+ */
+export async function probeViewer(port: number): Promise<ViewerState | null> {
+  const url = `http://127.0.0.1:${port}`;
+  const health = await new Promise<ViewerHealth | null>((resolve) => {
+    const request = http.get(`${url}/api/health`, (response) => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        resolve(null);
+        return;
+      }
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk: string) => {
+        if (body.length <= 4096) body += chunk;
+      });
+      response.on('end', () => {
+        try {
+          const parsed = JSON.parse(body) as Partial<ViewerHealth>;
+          resolve(
+            parsed.app === 'ultrateam' && typeof parsed.instanceId === 'string' && parsed.instanceId.length > 0
+              && Number.isInteger(parsed.pid) && (parsed.pid as number) > 0
+              ? (parsed as ViewerHealth)
+              : null,
+          );
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    request.setTimeout(HEALTH_TIMEOUT_MS, () => request.destroy());
+    request.on('error', () => resolve(null));
+  });
+  if (!health) return null;
+  return {
+    version: 1,
+    instanceId: health.instanceId,
+    pid: health.pid,
+    port,
+    url,
+    mode: 'background',
+    cwd: process.cwd(),
+    startedAt: new Date().toISOString(),
+  };
+}
+
 export async function waitForViewer(
   instanceId: string,
   file: string = defaultViewerStatePath(),

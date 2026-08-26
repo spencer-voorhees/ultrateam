@@ -14,6 +14,7 @@ import { startViewer } from './viewer/server.js';
 import {
   claimStartLock,
   defaultViewerLogPath,
+  probeViewer,
   releaseStartLock,
   removeViewerState,
   runningViewer,
@@ -170,6 +171,18 @@ program
         return;
       }
 
+      // A viewer can outlive its state file (crashed starter, clobbered
+      // viewer.json). If a healthy ultrateam viewer already answers on the
+      // requested port, adopt it — restarting alongside it would put a shadow
+      // instance on a fallback port nobody asked for.
+      const orphan = await probeViewer(opts.port);
+      if (orphan) {
+        writeViewerState(orphan);
+        console.log(`Reusing ultrateam viewer at ${orphan.url} (PID ${orphan.pid}).`);
+        if (opts.open) openBrowser(orphan.url);
+        return;
+      }
+
       // Two invocations can race here (the app auto-start plus a manual run).
       // Only one gets to spawn; the other waits for whichever viewer comes up.
       if (!claimStartLock()) {
@@ -248,21 +261,38 @@ program
       return;
     }
 
+    const mode: ViewerMode = process.env.ULTRATEAM_VIEWER_MODE === 'background'
+      ? 'background'
+      : 'foreground';
     if (existing) {
+      // A background child that finds a healthy viewer yields quietly — its
+      // parent invocation adopts the survivor. Only a human-run --foreground
+      // gets the instructive error.
+      if (mode === 'background') {
+        console.log(`Reusing ultrateam viewer at ${existing.url} (PID ${existing.pid}).`);
+        return;
+      }
       throw new Error(
         `The ultrateam viewer is already running at ${existing.url} (PID ${existing.pid}). Run \`ultrateam view --stop\` first.`,
       );
     }
 
     const instanceId = process.env.ULTRATEAM_VIEWER_INSTANCE_ID ?? randomUUID();
-    const mode: ViewerMode = process.env.ULTRATEAM_VIEWER_MODE === 'background'
-      ? 'background'
-      : 'foreground';
     const handle = await startViewer({
       port: opts.port,
       instanceId,
       portFallback: mode === 'background',
     });
+    const winner = await runningViewer();
+    if (winner && winner.instanceId !== instanceId) {
+      // Lost a start race after binding: another healthy viewer exists. Yield
+      // without writing state or claiming a port in the log — a printed
+      // "viewer at :port" for a process about to exit is how phantom ports
+      // end up in error reports.
+      handle.close();
+      console.log(`Reusing ultrateam viewer at ${winner.url} (PID ${winner.pid}).`);
+      return;
+    }
     const state: ViewerState = {
       version: 1,
       instanceId,
