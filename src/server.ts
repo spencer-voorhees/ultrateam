@@ -50,7 +50,7 @@ const entryFields = {
   agent_name: z
     .string()
     .optional()
-    .describe('Override the auto-detected agent name (e.g. "claude-code", "cursor")'),
+    .describe('Override the auto-detected agent name ONLY with the harness you actually are (e.g. "claude-code", "cursor"). Never pass a task or role name here — it would mint a phantom agent. If you are a subagent, keep the harness name and pass subagent: true instead'),
   model: z.string().optional().describe('Always set this to the model id you are running as, e.g. "claude-sonnet-4-6" or "gpt-5.6", so entries are attributed to the right model'),
   subagent: z
     .boolean()
